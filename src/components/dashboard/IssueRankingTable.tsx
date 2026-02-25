@@ -26,8 +26,8 @@ export default function IssueRankingTable({ issues }: { issues: Issue[] }) {
   }
 
   return (
-    <div className="overflow-x-auto w-full"> {/* Responsive wrapper */}
-      <table className="w-full min-w-[500px] text-xs"> {/* Minimum width to keep columns legible */}
+    <div className="overflow-x-auto w-full">
+      <table className="w-full min-w-[500px] text-xs">
         <thead className="bg-gray-50 sticky top-0">
           <tr>
             <th className="text-left px-4 py-2.5 font-semibold text-gray-500">#</th>
@@ -44,7 +44,11 @@ export default function IssueRankingTable({ issues }: { issues: Issue[] }) {
               <td className="px-4 py-3 font-medium text-gray-700 capitalize">
                 {issue.driver_tag.replace(/_/g, ' ')}
               </td>
-              {/* ... other td cells ... */}
+              <td className="px-4 py-3 text-right text-gray-600">{issue.risk.toFixed(1)}</td>
+              <td className="px-4 py-3 text-right text-gray-600">{issue.friction.toFixed(1)}</td>
+              <td className="px-4 py-3 text-right">
+                <PriorityBadge score={issue.priority_score} />
+              </td>
             </tr>
           ))}
         </tbody>
