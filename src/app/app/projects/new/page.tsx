@@ -1,9 +1,10 @@
 // @ts-nocheck
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { AnimatePresence, motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 
 const STAGE_OPTIONS = ['Discovery', 'Growth', 'Optimization', 'Retention', 'Turnaround']
 const CHANNEL_OPTIONS = ['Web', 'Mobile App', 'In-store', 'Phone/Call Center', 'Email', 'Social Media', 'Marketplace']
@@ -123,11 +124,10 @@ export default function NewProjectPage() {
                 key={ch}
                 type="button"
                 onClick={() => toggleChannel(ch)}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                  form.channels.includes(ch)
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'bg-white border-gray-300 text-gray-600 hover:border-blue-400'
-                }`}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${form.channels.includes(ch)
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-white border-gray-300 text-gray-600 hover:border-blue-400'
+                  }`}
               >
                 {ch}
               </button>
@@ -161,13 +161,43 @@ export default function NewProjectPage() {
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex-1 bg-blue-600 text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-500 transition-colors"
           >
-            {loading ? 'Creating…' : 'Create Project'}
-          </button>
+            <AnimatePresence>
+              {loading ? (
+                <motion.span
+                  key="loading"
+                  className="inline-flex items-center gap-2"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <motion.span
+                    aria-hidden="true"
+                    className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                  />
+                  Creating…
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="idle"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  Create Project
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
         </div>
       </form>
     </div>

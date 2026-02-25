@@ -1,8 +1,9 @@
-import { notFound } from 'next/navigation'
+
+import ScoreRunTrigger from '@/components/app/ScoreRunTrigger'
+import SurveyManager from '@/components/app/SurveyManager'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import SurveyManager from '@/components/app/SurveyManager'
-import ScoreRunTrigger from '@/components/app/ScoreRunTrigger'
+import { notFound } from 'next/navigation'
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -30,22 +31,22 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   // Count responses directly from responses table (reliable, no RPC dependency)
   const responseCount = activeSurvey
     ? ((await serviceClient
-        .from('responses')
-        .select('id', { count: 'exact', head: true })
-        .eq('survey_id', activeSurvey.id)
-      ).count ?? 0)
+      .from('responses')
+      .select('id', { count: 'exact', head: true })
+      .eq('survey_id', activeSurvey.id)
+    ).count ?? 0)
     : 0
 
   // Load latest score run
   const latestScoreRun: any = activeSurvey
     ? (await serviceClient
-        .from('score_runs')
-        .select('id, executed_at, checksum, response_count')
-        .eq('survey_id', activeSurvey.id)
-        .order('executed_at', { ascending: false })
-        .limit(1)
-        .single()
-      ).data
+      .from('score_runs')
+      .select('id, executed_at, checksum, response_count')
+      .eq('survey_id', activeSurvey.id)
+      .order('executed_at', { ascending: false })
+      .limit(1)
+      .single()
+    ).data
     : null
 
   return (
@@ -61,11 +62,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <h1 className="text-2xl font-bold text-gray-900">{project.client_name}</h1>
           <p className="text-gray-500 text-sm mt-1">{project.goal ?? 'No goal set'}</p>
         </div>
-        <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${
-          project.status === 'active' ? 'bg-green-100 text-green-700' :
+        <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${project.status === 'active' ? 'bg-green-100 text-green-700' :
           project.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-          'bg-yellow-100 text-yellow-700'
-        }`}>
+            'bg-yellow-100 text-yellow-700'
+          }`}>
           {project.status}
         </span>
       </div>
