@@ -88,21 +88,21 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
   const healthLabel = healthScore >= 75 ? 'Healthy' : healthScore >= 50 ? 'Needs Attention' : 'At Risk'
 
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8"> {/* Responsive padding */}
+      {/* Header: Vertical on mobile, Horizontal on desktop */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-400 mb-1">
             <Link href={`/app/projects/${id}`} className="hover:text-gray-600">← {project.client_name}</Link>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Decision Dashboard</h1>
           <p className="text-gray-500 text-sm mt-0.5">
-            Framework v{scoreRun.framework_version} · {liveCount} response{liveCount !== 1 ? 's' : ''} · {new Date(scoreRun.executed_at).toLocaleDateString()}
+            Framework v{scoreRun.framework_version} · {liveCount} response{liveCount !== 1 ? 's' : ''}
           </p>
         </div>
         <Link
           href={`/reports/${id}`}
-          className="bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+          className="w-full sm:w-auto text-center bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
         >
           Export Report →
         </Link>
@@ -144,8 +144,8 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
         </div>
       </div>
 
-      {/* Index Score Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+     {/* Index Score Cards: 1 col on mobile, 2 on small, 5 on xl */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
         {(indexResults ?? []).map(idx => (
           <IndexScoreCard
             key={idx.index_key}
@@ -167,13 +167,11 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
           <IssueRankingTable issues={issueRankings ?? []} />
         </div>
 
-        {/* Category Chart */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-700">Category Breakdown</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Normalized 0–100 per category</p>
           </div>
-          <div className="p-6">
+          <div className="p-4 md:p-6">
             <CategoryChart
               categories={(categoryResults ?? []).map(r => ({
                 name: (r.framework_categories as any)?.name ?? r.category_id,

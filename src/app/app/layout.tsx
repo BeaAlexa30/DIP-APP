@@ -10,32 +10,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect('/login')
 
-  // Use service client to bypass RLS for profile lookup
   const serviceClient = await createServiceClient()
-  let { data: profile, error: profileError } = await serviceClient
+  let { data: profile } = await serviceClient
     .from('profiles')
     .select('full_name, role, email')
     .eq('id', user.id)
     .single()
 
-  console.log('[layout] user.id:', user.id)
-  console.log('[layout] profile:', profile)
-  console.log('[layout] profileError:', profileError)
-
-  // Auto-create profile if missing (handles users who signed up before trigger was fixed)
-  if (!profile) {
+ if (!profile) {
     console.log('[layout] profile missing, upserting...')
-    const { data: newProfile, error: upsertError } = await serviceClient
+    // We cast 'as any' here to bypass the strict type check since we know the table structure
+    const { data: newProfile, error: upsertError } = await (serviceClient
       .from('profiles')
-      .upsert({ id: user.id, email: user.email!, role: 'analyst' }, { onConflict: 'id' })
+      .upsert({ 
+        id: user.id, 
+        email: user.email!, 
+        role: 'analyst' 
+      } as any, { onConflict: 'id' }) as any)
       .select('full_name, role, email')
       .single()
+    
     console.log('[layout] upsert result:', newProfile, upsertError)
     profile = newProfile
   }
 
   return (
-    <div className="flex h-screen bg-gray-950 text-white overflow-hidden">
+    // Changed: flex-col for mobile, flex-row for desktop
+    <div className="flex flex-col md:flex-row h-screen bg-gray-950 text-white overflow-hidden">
       <Sidebar profile={profile} />
       <main className="flex-1 overflow-auto bg-gray-50 text-gray-900">
         {children}

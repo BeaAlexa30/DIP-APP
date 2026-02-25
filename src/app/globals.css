@@ -24,3 +24,17 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@layer base {
+  html, body {
+    /* Safe Area Insets for mobile notches */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    
+    /* Ensure the body takes full height and doesn't bounce weirdly */
+    min-height: 100%;
+    overflow-x: hidden;
+  }
+}
