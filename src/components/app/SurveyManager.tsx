@@ -77,7 +77,7 @@ export default function SurveyManager({
     setError(null)
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setError('Not authenticated.'); setLoading(false); return }
+    if (!user) { setError('Not authenticated.'); setLoading(false); setGenerating(false); return }
 
     // Build pack snapshot from API
     const snapRes = await fetch('/api/framework/snapshot', {

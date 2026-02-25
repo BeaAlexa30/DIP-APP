@@ -1,17 +1,14 @@
-'use client'
 
 import ScoreRunTrigger from '@/components/app/ScoreRunTrigger'
 import SurveyManager from '@/components/app/SurveyManager'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { useState } from 'react'
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
   const serviceClient = await createServiceClient()
-  const [loading, setLoading] = useState(true)
 
   const [projectRes, packsRes, surveysRes] = await Promise.all([
     serviceClient.from('projects').select('*').eq('id', id).single(),
