@@ -283,97 +283,56 @@ export function generatePDFReport(data: ReportData): Blob {
 
   // ─── AI Insights (clearly labeled) ──────────────────────────
   if (data.aiInsightSummary || (data.aiThemes && data.aiThemes.length > 0)) {
-    checkPage(40)
 
-    // Section header — rendered as a single-row autoTable for reliable sizing
-    autoTable(doc, {
-      startY: y,
-      body: [['AI-Generated Insights']],
-      styles: {
-        fontSize: 13,
-        fontStyle: 'bold',
-        textColor: [91, 33, 182],
-        fillColor: [245, 243, 255],
-        cellPadding: { top: 5, bottom: 5, left: 4, right: 4 },
-      },
-      theme: 'plain',
-      margin: { left: margin, right: margin },
-    })
-    y = doc.lastAutoTable.finalY + 2
-
-    // Disclaimer row
-    autoTable(doc, {
-      startY: y,
-      body: [['Note: AI-generated content for reference only. Does not affect scoring.']],
-      styles: {
-        fontSize: 9,
-        fontStyle: 'italic',
-        textColor: [120, 53, 165],
-        fillColor: [255, 255, 255],
-        cellPadding: { top: 2, bottom: 6, left: 0, right: 0 },
-      },
-      theme: 'plain',
-      margin: { left: margin, right: margin },
-    })
-    y = doc.lastAutoTable.finalY + 2
-
+    type AiRowType = 'header' | 'disclaimer' | 'summary' | 'themes'
+    const aiRows: { type: AiRowType; text: string }[] = [
+      { type: 'header',     text: 'AI-Generated Insights' },
+      { type: 'disclaimer', text: 'Note: AI-generated content for reference only. Does not affect scoring.' },
+    ]
     if (data.aiInsightSummary) {
-      autoTable(doc, {
-        startY: y,
-        body: [[data.aiInsightSummary]],
-        styles: {
-          fontSize: 10,
-          textColor: [55, 20, 100],
-          fillColor: [250, 245, 255],
-          lineColor: [216, 180, 254],
-          lineWidth: 0.5,
-          cellPadding: { top: 8, bottom: 8, left: 6, right: 6 },
-          overflow: 'linebreak',
-        },
-        theme: 'plain',
-        margin: { left: margin, right: margin },
-      })
-      y = doc.lastAutoTable.finalY + 10
+      aiRows.push({ type: 'summary', text: data.aiInsightSummary })
     }
-
     if (data.aiThemes && data.aiThemes.length > 0) {
-      // "Key Themes" label
-      autoTable(doc, {
-        startY: y,
-        body: [['Key Themes:']],
-        styles: {
-          fontSize: 10,
-          fontStyle: 'bold',
-          textColor: [91, 33, 182],
-          fillColor: [255, 255, 255],
-          cellPadding: { top: 0, bottom: 4, left: 0, right: 0 },
-        },
-        theme: 'plain',
-        margin: { left: margin, right: margin },
-      })
-      y = doc.lastAutoTable.finalY
-
-      // Themes as rows with bullet
-      autoTable(doc, {
-        startY: y,
-        body: data.aiThemes.map(t => ['\u2022', t]),
-        styles: {
-          fontSize: 9.5,
-          textColor: [75, 85, 99],
-          fillColor: [255, 255, 255],
-          cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
-          overflow: 'linebreak',
-        },
-        columnStyles: {
-          0: { cellWidth: 8 },
-          1: { cellWidth: 174 },
-        },
-        theme: 'plain',
-        margin: { left: margin, right: margin },
-      })
-      y = doc.lastAutoTable.finalY + 6
+      aiRows.push({ type: 'themes', text: data.aiThemes.map(t => '\u2022  ' + t).join('\n') })
     }
 
+    autoTable(doc, {
+      startY: y,
+      body: aiRows.map(r => [r.text]),
+      theme: 'plain',
+      styles: { overflow: 'linebreak', cellPadding: { top: 4, bottom: 4, left: 6, right: 6 } },
+      didParseCell: (hookData) => {
+        const rowType = aiRows[hookData.row.index]?.type
+        if (rowType === 'header') {
+          hookData.cell.styles.fontSize = 13
+          hookData.cell.styles.fontStyle = 'bold'
+          hookData.cell.styles.textColor = [91, 33, 182] as [number, number, number]
+          hookData.cell.styles.fillColor = [245, 243, 255] as [number, number, number]
+          hookData.cell.styles.cellPadding = { top: 6, bottom: 6, left: 4, right: 4 }
+        } else if (rowType === 'disclaimer') {
+          hookData.cell.styles.fontSize = 9
+          hookData.cell.styles.fontStyle = 'italic'
+          hookData.cell.styles.textColor = [120, 53, 165] as [number, number, number]
+          hookData.cell.styles.fillColor = [255, 255, 255] as [number, number, number]
+          hookData.cell.styles.cellPadding = { top: 3, bottom: 8, left: 2, right: 2 }
+        } else if (rowType === 'summary') {
+          hookData.cell.styles.fontSize = 10
+          hookData.cell.styles.textColor = [55, 20, 100] as [number, number, number]
+          hookData.cell.styles.fillColor = [250, 245, 255] as [number, number, number]
+          hookData.cell.styles.lineColor = [216, 180, 254] as [number, number, number]
+          hookData.cell.styles.lineWidth = 0.4
+          hookData.cell.styles.cellPadding = { top: 8, bottom: 8, left: 8, right: 8 }
+        } else if (rowType === 'themes') {
+          hookData.cell.styles.fontSize = 9.5
+          hookData.cell.styles.textColor = [75, 85, 99] as [number, number, number]
+          hookData.cell.styles.fillColor = [255, 255, 255] as [number, number, number]
+          hookData.cell.styles.cellPadding = { top: 8, bottom: 4, left: 4, right: 4 }
+        }
+      },
+      margin: { left: margin, right: margin },
+    })
+
+    y = doc.lastAutoTable.finalY + 8
     divider([216, 180, 254])
   }
 
