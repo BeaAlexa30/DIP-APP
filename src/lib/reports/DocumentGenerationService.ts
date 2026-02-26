@@ -298,20 +298,24 @@ export function generatePDFReport(data: ReportData): Blob {
     doc.setTextColor(120, 53, 165)
     doc.setFont('helvetica', 'italic')
     doc.text('Note: AI-generated content for reference only. Does not affect scoring.', margin, y)
-    y += 8
+    y += 10
 
     if (data.aiInsightSummary) {
       doc.setDrawColor(216, 180, 254)
       doc.setLineWidth(0.5)
       doc.setFillColor(250, 245, 255)
-      const lines = doc.splitTextToSize(data.aiInsightSummary, 176)
-      const boxH = lines.length * 5 + 10
-      doc.roundedRect(margin, y, 182, boxH, 3, 3, 'FD')
       doc.setFontSize(9)
+      const lines = doc.splitTextToSize(data.aiInsightSummary, 170)
+      const lineH = 6
+      const boxPadV = 8
+      const boxH = lines.length * lineH + boxPadV * 2
+      doc.roundedRect(margin, y, 182, boxH, 3, 3, 'FD')
       doc.setTextColor(55, 20, 100)
       doc.setFont('helvetica', 'normal')
-      doc.text(lines, margin + 4, y + 7)
-      y += boxH + 6
+      lines.forEach((line: string, idx: number) => {
+        doc.text(line, margin + 6, y + boxPadV + idx * lineH)
+      })
+      y += boxH + 8
       doc.setLineWidth(0.2)
     }
 
@@ -327,9 +331,11 @@ export function generatePDFReport(data: ReportData): Blob {
         doc.setTextColor(75, 85, 99)
         doc.setFont('helvetica', 'normal')
         doc.text('●', margin + 2, y)
-        const themeLines = doc.splitTextToSize(theme, 174)
-        doc.text(themeLines, margin + 6, y)
-        y += themeLines.length * 5
+        const themeLines = doc.splitTextToSize(theme, 170)
+        themeLines.forEach((tl: string, ti: number) => {
+          doc.text(tl, margin + 6, y + ti * 6)
+        })
+        y += themeLines.length * 6 + 2
       })
       y += 2
     }
