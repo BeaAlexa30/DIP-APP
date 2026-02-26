@@ -250,12 +250,14 @@ export default async function ReportPage({
 
         {/* AI Insights */}
         {aiInsights && (
-          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-sm font-semibold text-purple-700">AI Summary</h2>
+          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-8">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xl">✨</span>
+              <h2 className="text-base font-semibold text-purple-800">AI-Generated Insights</h2>
               <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium">Non-Scoring</span>
             </div>
-            <p className="text-sm text-gray-700 leading-relaxed">{aiInsights.summary_text}</p>
+            <p className="text-xs text-purple-400 italic mb-5">AI-generated content for reference only. Does not affect scoring.</p>
+            <p className="text-sm text-purple-900 leading-8 tracking-wide break-words">{aiInsights.summary_text}</p>
           </div>
         )}
 

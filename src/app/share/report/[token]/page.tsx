@@ -191,22 +191,23 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
 
         {/* AI Insights */}
         {(aiInsights as any)?.summary_text && (
-          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-6">
-            <div className="flex items-center gap-2 mb-4">
+          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-8 mb-6">
+            <div className="flex items-center gap-2 mb-3">
               <span className="text-2xl">✨</span>
-              <h2 className="text-sm font-semibold text-purple-900">AI-Generated Insights</h2>
+              <h2 className="text-base font-semibold text-purple-900">AI-Generated Insights</h2>
               <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">Non-Scoring</span>
             </div>
-            <p className="text-sm text-purple-900 leading-relaxed whitespace-pre-wrap">
+            <p className="text-xs text-purple-400 italic mb-5">AI-generated content for reference only. Does not affect scoring.</p>
+            <p className="text-sm text-purple-900 leading-8 tracking-wide break-words">
               {(aiInsights as any).summary_text}
             </p>
             {Array.isArray((aiInsights as any).themes_json) && ((aiInsights as any).themes_json as string[]).length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs font-semibold text-purple-700 mb-2">Key Themes:</p>
-                <ul className="space-y-1">
+              <div className="mt-6 pt-5 border-t border-purple-200">
+                <p className="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-3">Key Themes</p>
+                <ul className="space-y-2.5">
                   {((aiInsights as any).themes_json as string[]).map((theme, i) => (
-                    <li key={i} className="text-sm text-purple-800 flex items-start gap-2">
-                      <span className="text-purple-400 mt-1">●</span>
+                    <li key={i} className="text-sm text-purple-800 flex items-start gap-2.5 leading-6">
+                      <span className="text-purple-400 mt-1 shrink-0">●</span>
                       <span>{theme}</span>
                     </li>
                   ))}
