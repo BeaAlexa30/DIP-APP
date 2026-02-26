@@ -29,6 +29,7 @@ const PERMISSIONS = {
   viewResponses:       ['admin', 'analyst'] as UserRole[],
   viewFrameworks:      ['admin', 'analyst'] as UserRole[],
   manageSurvey:        ['admin'] as UserRole[],  // manual survey close/reopen
+  manageFramework:     ['admin'] as UserRole[],  // toggle framework pack active status
 } as const
 
 export type Permission = keyof typeof PERMISSIONS

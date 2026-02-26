@@ -2,24 +2,91 @@ import { createClient } from '@/lib/supabase/ServerSideDbConnector'
 import { getCurrentProfile } from '@/lib/auth/UserProfileRetriever'
 import { can } from '@/lib/auth/UserPermissionDefinitions'
 import Link from 'next/link'
+import DashboardCharts from '@/components/dashboard/DashboardCharts'
+import DashboardAutoInsights from '@/components/dashboard/DashboardAutoInsights'
+import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns'
 
 export default async function AppDashboard() {
   const supabase = await createClient()
   const profile = await getCurrentProfile()
   const canCreate = can(profile?.role, 'createProject')
 
-  const [{ data: projects }, { count: projectCount }, { count: surveyCount }, { count: frameworkCount }] = await Promise.all([
-    supabase.from('projects').select('id, client_name, status, created_at').order('created_at', { ascending: false }).limit(5),
-    supabase.from('projects').select('id', { count: 'exact', head: true }),
-    supabase.from('surveys').select('id, projects!inner(status)', { count: 'exact', head: true }).eq('status', 'published').neq('projects.status', 'archived'),
+  const [
+    { data: recentProjects },
+    { data: allProjectStatuses },
+    { data: allSurveyStatuses },
+    { count: frameworkCount },
+    { data: allProjectDates },
+  ] = await Promise.all([
+    supabase
+      .from('projects')
+      .select('id, client_name, status, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase.from('projects').select('status'),
+    supabase.from('surveys').select('status'),
     supabase.from('framework_packs').select('id', { count: 'exact', head: true }).eq('active', true),
+    supabase.from('projects').select('created_at'),
   ])
 
+  // ── Status groupings ──────────────────────────────────────
+  const statusGroup = (allProjectStatuses ?? []).reduce<Record<string, number>>((acc, p) => {
+    acc[p.status] = (acc[p.status] ?? 0) + 1
+    return acc
+  }, {})
+
+  const surveyGroup = (allSurveyStatuses ?? []).reduce<Record<string, number>>((acc, s) => {
+    acc[s.status] = (acc[s.status] ?? 0) + 1
+    return acc
+  }, {})
+
+  const totalProjects = allProjectStatuses?.length ?? 0
+  const activeSurveys = surveyGroup['published'] ?? 0
+  const totalSurveys = allSurveyStatuses?.length ?? 0
+
   const stats = [
-    { label: 'Total Projects', value: projectCount ?? 0, href: '/app/projects', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-    { label: 'Active Surveys', value: surveyCount ?? 0, href: '/app/projects', color: 'bg-green-50 text-green-700 border-green-200' },
+    { label: 'Total Projects', value: totalProjects, href: '/app/projects', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+    { label: 'Active Surveys', value: activeSurveys, href: '/app/projects', color: 'bg-green-50 text-green-700 border-green-200' },
     { label: 'Framework Packs', value: frameworkCount ?? 0, href: '/app/frameworks', color: 'bg-purple-50 text-purple-700 border-purple-200' },
   ]
+
+  // ── Chart data ────────────────────────────────────────────
+  const projectsByStatus = [
+    { name: 'Active',    value: statusGroup['active']    ?? 0, color: '#22c55e' },
+    { name: 'Draft',     value: statusGroup['draft']     ?? 0, color: '#f59e0b' },
+    { name: 'Completed', value: statusGroup['completed'] ?? 0, color: '#3b82f6' },
+    { name: 'Archived',  value: statusGroup['archived']  ?? 0, color: '#9ca3af' },
+  ]
+
+  const surveysByStatus = [
+    { name: 'Published', value: surveyGroup['published'] ?? 0, color: '#22c55e' },
+    { name: 'Draft',     value: surveyGroup['draft']     ?? 0, color: '#f59e0b' },
+    { name: 'Closed',    value: surveyGroup['closed']    ?? 0, color: '#6b7280' },
+  ]
+
+  // Project trend — last 6 months
+  const now = new Date()
+  const projectTrend = Array.from({ length: 6 }, (_, i) => {
+    const monthDate = subMonths(now, 5 - i)
+    const start = startOfMonth(monthDate).toISOString()
+    const end = endOfMonth(monthDate).toISOString()
+    const count = (allProjectDates ?? []).filter(
+      (p) => p.created_at >= start && p.created_at <= end
+    ).length
+    return { month: format(monthDate, 'MMM'), projects: count }
+  })
+
+  // ── Gemini insight payload ────────────────────────────────
+  const insightPayload = {
+    totalProjects,
+    activeProjects: statusGroup['active'] ?? 0,
+    completedProjects: statusGroup['completed'] ?? 0,
+    draftProjects: statusGroup['draft'] ?? 0,
+    archivedProjects: statusGroup['archived'] ?? 0,
+    activeSurveys,
+    totalSurveys,
+    frameworkPacks: frameworkCount ?? 0,
+  }
 
   return (
     <div className="p-8">
@@ -39,6 +106,17 @@ export default async function AppDashboard() {
         ))}
       </div>
 
+      {/* Charts */}
+      <DashboardCharts
+        projectsByStatus={projectsByStatus}
+        surveysByStatus={surveysByStatus}
+        projectTrend={projectTrend}
+        frameworkCount={frameworkCount ?? 0}
+      />
+
+      {/* AI Auto Insights */}
+      <DashboardAutoInsights payload={insightPayload} />
+
       {/* Recent Projects */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -50,8 +128,8 @@ export default async function AppDashboard() {
           )}
         </div>
         <div className="divide-y divide-gray-50">
-          {projects && projects.length > 0 ? (
-            projects.map(p => (
+          {recentProjects && recentProjects.length > 0 ? (
+            recentProjects.map(p => (
               <Link
                 key={p.id}
                 href={`/app/projects/${p.id}`}
@@ -64,9 +142,9 @@ export default async function AppDashboard() {
                   </p>
                 </div>
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                  p.status === 'active' ? 'bg-green-100 text-green-700' :
-                  p.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                  p.status === 'archived' ? 'bg-gray-100 text-gray-500' :
+                  p.status === 'active'    ? 'bg-green-100 text-green-700'  :
+                  p.status === 'completed' ? 'bg-blue-100 text-blue-700'    :
+                  p.status === 'archived'  ? 'bg-gray-100 text-gray-500'    :
                   'bg-yellow-100 text-yellow-700'
                 }`}>
                   {p.status}
