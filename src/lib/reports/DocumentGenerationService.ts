@@ -283,55 +283,83 @@ export function generatePDFReport(data: ReportData): Blob {
 
   // ─── AI Insights (clearly labeled) ──────────────────────────
   if (data.aiInsightSummary || (data.aiThemes && data.aiThemes.length > 0)) {
-    checkPage(50)
-    
-    // Section header with icon
+    checkPage(60)
+
+    // Section header banner
     doc.setFillColor(245, 243, 255)
-    doc.roundedRect(margin, y, 182, 8, 2, 2, 'F')
-    doc.setFontSize(12)
+    doc.roundedRect(margin, y, 182, 10, 2, 2, 'F')
+    doc.setFontSize(13)
     doc.setTextColor(91, 33, 182)
     doc.setFont('helvetica', 'bold')
-    doc.text('✨ AI-Generated Insights', margin + 3, y + 5.5)
-    y += 12
-    
-    doc.setFontSize(8)
+    doc.text('AI-Generated Insights', margin + 3, y + 7)
+    y += 16
+
+    // Disclaimer
+    doc.setFontSize(9)
     doc.setTextColor(120, 53, 165)
     doc.setFont('helvetica', 'italic')
     doc.text('Note: AI-generated content for reference only. Does not affect scoring.', margin, y)
-    y += 8
+    y += 10
 
     if (data.aiInsightSummary) {
+      const fontSizePt = 10
+      const fontSizeMm = fontSizePt * 0.3528   // pt → mm baseline offset
+      const lineSpacing = 7                     // mm between baselines
+      const paddingX = 6
+      const paddingTop = 10
+      const paddingBottom = 10
+
+      doc.setFontSize(fontSizePt)
+      doc.setFont('helvetica', 'normal')
+
+      const lines = doc.splitTextToSize(data.aiInsightSummary, 182 - paddingX * 2) as string[]
+      const boxH = paddingTop + fontSizeMm + (lines.length - 1) * lineSpacing + paddingBottom
+
+      checkPage(boxH + 12)
+
+      // Draw box first
       doc.setDrawColor(216, 180, 254)
       doc.setLineWidth(0.5)
       doc.setFillColor(250, 245, 255)
-      const lines = doc.splitTextToSize(data.aiInsightSummary, 176)
-      const boxH = lines.length * 5 + 10
       doc.roundedRect(margin, y, 182, boxH, 3, 3, 'FD')
-      doc.setFontSize(9)
-      doc.setTextColor(55, 20, 100)
-      doc.setFont('helvetica', 'normal')
-      doc.text(lines, margin + 4, y + 7)
-      y += boxH + 6
       doc.setLineWidth(0.2)
+
+      // Manually place each line so spacing matches boxH exactly
+      doc.setTextColor(55, 20, 100)
+      lines.forEach((line: string, i: number) => {
+        doc.text(line, margin + paddingX, y + paddingTop + fontSizeMm + i * lineSpacing)
+      })
+
+      y += boxH + 12
     }
 
     if (data.aiThemes && data.aiThemes.length > 0) {
-      doc.setFontSize(9)
+      checkPage(30)
+      doc.setFontSize(10)
       doc.setTextColor(91, 33, 182)
       doc.setFont('helvetica', 'bold')
       doc.text('Key Themes:', margin, y)
-      y += 6
-      
+      y += 9
+
+      const themeFontPt = 9.5
+      const themeFontMm = themeFontPt * 0.3528
+      const themeLineSpacing = 6.5
+
       data.aiThemes.forEach(theme => {
-        doc.setFontSize(8)
+        const themeLines = doc.splitTextToSize(theme, 170) as string[]
+        const blockH = themeFontMm + (themeLines.length - 1) * themeLineSpacing + 5
+        checkPage(blockH + 4)
+
+        doc.setFontSize(themeFontPt)
         doc.setTextColor(75, 85, 99)
         doc.setFont('helvetica', 'normal')
-        doc.text('●', margin + 2, y)
-        const themeLines = doc.splitTextToSize(theme, 174)
-        doc.text(themeLines, margin + 6, y)
-        y += themeLines.length * 5
+        doc.text('\u2022', margin + 3, y + themeFontMm)
+        themeLines.forEach((tl: string, i: number) => {
+          doc.text(tl, margin + 9, y + themeFontMm + i * themeLineSpacing)
+        })
+        y += blockH
       })
-      y += 2
+      y += 4
     }
     divider([216, 180, 254])
   }
