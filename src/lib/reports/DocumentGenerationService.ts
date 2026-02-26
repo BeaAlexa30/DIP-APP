@@ -283,84 +283,97 @@ export function generatePDFReport(data: ReportData): Blob {
 
   // ─── AI Insights (clearly labeled) ──────────────────────────
   if (data.aiInsightSummary || (data.aiThemes && data.aiThemes.length > 0)) {
-    checkPage(60)
+    checkPage(40)
 
-    // Section header banner
-    doc.setFillColor(245, 243, 255)
-    doc.roundedRect(margin, y, 182, 10, 2, 2, 'F')
-    doc.setFontSize(13)
-    doc.setTextColor(91, 33, 182)
-    doc.setFont('helvetica', 'bold')
-    doc.text('AI-Generated Insights', margin + 3, y + 7)
-    y += 16
+    // Section header — rendered as a single-row autoTable for reliable sizing
+    autoTable(doc, {
+      startY: y,
+      body: [['AI-Generated Insights']],
+      styles: {
+        fontSize: 13,
+        fontStyle: 'bold',
+        textColor: [91, 33, 182],
+        fillColor: [245, 243, 255],
+        cellPadding: { top: 5, bottom: 5, left: 4, right: 4 },
+      },
+      theme: 'plain',
+      margin: { left: margin, right: margin },
+    })
+    y = doc.lastAutoTable.finalY + 2
 
-    // Disclaimer
-    doc.setFontSize(9)
-    doc.setTextColor(120, 53, 165)
-    doc.setFont('helvetica', 'italic')
-    doc.text('Note: AI-generated content for reference only. Does not affect scoring.', margin, y)
-    y += 10
+    // Disclaimer row
+    autoTable(doc, {
+      startY: y,
+      body: [['Note: AI-generated content for reference only. Does not affect scoring.']],
+      styles: {
+        fontSize: 9,
+        fontStyle: 'italic',
+        textColor: [120, 53, 165],
+        fillColor: [255, 255, 255],
+        cellPadding: { top: 2, bottom: 6, left: 0, right: 0 },
+      },
+      theme: 'plain',
+      margin: { left: margin, right: margin },
+    })
+    y = doc.lastAutoTable.finalY + 2
 
     if (data.aiInsightSummary) {
-      const fontSizePt = 10
-      const fontSizeMm = fontSizePt * 0.3528   // pt → mm baseline offset
-      const lineSpacing = 7                     // mm between baselines
-      const paddingX = 6
-      const paddingTop = 10
-      const paddingBottom = 10
-
-      doc.setFontSize(fontSizePt)
-      doc.setFont('helvetica', 'normal')
-
-      const lines = doc.splitTextToSize(data.aiInsightSummary, 182 - paddingX * 2) as string[]
-      const boxH = paddingTop + fontSizeMm + (lines.length - 1) * lineSpacing + paddingBottom
-
-      checkPage(boxH + 12)
-
-      // Draw box first
-      doc.setDrawColor(216, 180, 254)
-      doc.setLineWidth(0.5)
-      doc.setFillColor(250, 245, 255)
-      doc.roundedRect(margin, y, 182, boxH, 3, 3, 'FD')
-      doc.setLineWidth(0.2)
-
-      // Manually place each line so spacing matches boxH exactly
-      doc.setTextColor(55, 20, 100)
-      lines.forEach((line: string, i: number) => {
-        doc.text(line, margin + paddingX, y + paddingTop + fontSizeMm + i * lineSpacing)
+      autoTable(doc, {
+        startY: y,
+        body: [[data.aiInsightSummary]],
+        styles: {
+          fontSize: 10,
+          textColor: [55, 20, 100],
+          fillColor: [250, 245, 255],
+          lineColor: [216, 180, 254],
+          lineWidth: 0.5,
+          cellPadding: { top: 8, bottom: 8, left: 6, right: 6 },
+          overflow: 'linebreak',
+        },
+        theme: 'plain',
+        margin: { left: margin, right: margin },
       })
-
-      y += boxH + 12
+      y = doc.lastAutoTable.finalY + 10
     }
 
     if (data.aiThemes && data.aiThemes.length > 0) {
-      checkPage(30)
-      doc.setFontSize(10)
-      doc.setTextColor(91, 33, 182)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Key Themes:', margin, y)
-      y += 9
-
-      const themeFontPt = 9.5
-      const themeFontMm = themeFontPt * 0.3528
-      const themeLineSpacing = 6.5
-
-      data.aiThemes.forEach(theme => {
-        const themeLines = doc.splitTextToSize(theme, 170) as string[]
-        const blockH = themeFontMm + (themeLines.length - 1) * themeLineSpacing + 5
-        checkPage(blockH + 4)
-
-        doc.setFontSize(themeFontPt)
-        doc.setTextColor(75, 85, 99)
-        doc.setFont('helvetica', 'normal')
-        doc.text('\u2022', margin + 3, y + themeFontMm)
-        themeLines.forEach((tl: string, i: number) => {
-          doc.text(tl, margin + 9, y + themeFontMm + i * themeLineSpacing)
-        })
-        y += blockH
+      // "Key Themes" label
+      autoTable(doc, {
+        startY: y,
+        body: [['Key Themes:']],
+        styles: {
+          fontSize: 10,
+          fontStyle: 'bold',
+          textColor: [91, 33, 182],
+          fillColor: [255, 255, 255],
+          cellPadding: { top: 0, bottom: 4, left: 0, right: 0 },
+        },
+        theme: 'plain',
+        margin: { left: margin, right: margin },
       })
-      y += 4
+      y = doc.lastAutoTable.finalY
+
+      // Themes as rows with bullet
+      autoTable(doc, {
+        startY: y,
+        body: data.aiThemes.map(t => ['\u2022', t]),
+        styles: {
+          fontSize: 9.5,
+          textColor: [75, 85, 99],
+          fillColor: [255, 255, 255],
+          cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+          overflow: 'linebreak',
+        },
+        columnStyles: {
+          0: { cellWidth: 8 },
+          1: { cellWidth: 174 },
+        },
+        theme: 'plain',
+        margin: { left: margin, right: margin },
+      })
+      y = doc.lastAutoTable.finalY + 6
     }
+
     divider([216, 180, 254])
   }
 
