@@ -284,49 +284,65 @@ export function generatePDFReport(data: ReportData): Blob {
   // ─── AI Insights (clearly labeled) ──────────────────────────
   if (data.aiInsightSummary || (data.aiThemes && data.aiThemes.length > 0)) {
 
-    type AiRowType = 'header' | 'disclaimer' | 'summary' | 'themes'
-    const aiRows: { type: AiRowType; text: string }[] = [
-      { type: 'header',     text: 'AI-Generated Insights' },
-      { type: 'disclaimer', text: 'Note: AI-generated content for reference only. Does not affect scoring.' },
-    ]
+    // Build body rows: disclaimer, summary, themes label, each theme
+    const aiBody: string[][] = []
+    aiBody.push(['Note: AI-generated content for reference only. Does not affect scoring.'])
     if (data.aiInsightSummary) {
-      aiRows.push({ type: 'summary', text: data.aiInsightSummary })
+      aiBody.push([data.aiInsightSummary])
     }
     if (data.aiThemes && data.aiThemes.length > 0) {
-      aiRows.push({ type: 'themes', text: data.aiThemes.map(t => '\u2022  ' + t).join('\n') })
+      aiBody.push(['Key Themes:'])
+      data.aiThemes.forEach(t => aiBody.push(['- ' + t]))
     }
 
     autoTable(doc, {
       startY: y,
-      body: aiRows.map(r => [r.text]),
+      head: [['AI-Generated Insights']],
+      body: aiBody,
       theme: 'plain',
-      styles: { overflow: 'linebreak', cellPadding: { top: 4, bottom: 4, left: 6, right: 6 } },
+      headStyles: {
+        fontSize: 13,
+        fontStyle: 'bold',
+        textColor: [91, 33, 182] as [number, number, number],
+        fillColor: [245, 243, 255] as [number, number, number],
+        cellPadding: { top: 6, bottom: 6, left: 5, right: 5 },
+      },
+      styles: {
+        fontSize: 10,
+        textColor: [55, 20, 100] as [number, number, number],
+        fillColor: [255, 255, 255] as [number, number, number],
+        overflow: 'linebreak',
+        cellPadding: { top: 5, bottom: 5, left: 5, right: 5 },
+      },
       didParseCell: (hookData) => {
-        const rowType = aiRows[hookData.row.index]?.type
-        if (rowType === 'header') {
-          hookData.cell.styles.fontSize = 13
-          hookData.cell.styles.fontStyle = 'bold'
-          hookData.cell.styles.textColor = [91, 33, 182] as [number, number, number]
-          hookData.cell.styles.fillColor = [245, 243, 255] as [number, number, number]
-          hookData.cell.styles.cellPadding = { top: 6, bottom: 6, left: 4, right: 4 }
-        } else if (rowType === 'disclaimer') {
-          hookData.cell.styles.fontSize = 9
-          hookData.cell.styles.fontStyle = 'italic'
-          hookData.cell.styles.textColor = [120, 53, 165] as [number, number, number]
-          hookData.cell.styles.fillColor = [255, 255, 255] as [number, number, number]
-          hookData.cell.styles.cellPadding = { top: 3, bottom: 8, left: 2, right: 2 }
-        } else if (rowType === 'summary') {
-          hookData.cell.styles.fontSize = 10
-          hookData.cell.styles.textColor = [55, 20, 100] as [number, number, number]
-          hookData.cell.styles.fillColor = [250, 245, 255] as [number, number, number]
-          hookData.cell.styles.lineColor = [216, 180, 254] as [number, number, number]
-          hookData.cell.styles.lineWidth = 0.4
-          hookData.cell.styles.cellPadding = { top: 8, bottom: 8, left: 8, right: 8 }
-        } else if (rowType === 'themes') {
-          hookData.cell.styles.fontSize = 9.5
-          hookData.cell.styles.textColor = [75, 85, 99] as [number, number, number]
-          hookData.cell.styles.fillColor = [255, 255, 255] as [number, number, number]
-          hookData.cell.styles.cellPadding = { top: 8, bottom: 4, left: 4, right: 4 }
+        if (hookData.section === 'body') {
+          const text = hookData.cell.raw as string
+          // Disclaimer row
+          if (text.startsWith('Note:')) {
+            hookData.cell.styles.fontSize = 9
+            hookData.cell.styles.textColor = [120, 53, 165] as [number, number, number]
+            hookData.cell.styles.cellPadding = { top: 3, bottom: 8, left: 5, right: 5 }
+          }
+          // Summary paragraph — add background box
+          else if (!text.startsWith('Key Themes:') && !text.startsWith('- ')) {
+            hookData.cell.styles.fillColor = [250, 245, 255] as [number, number, number]
+            hookData.cell.styles.lineColor = [216, 180, 254] as [number, number, number]
+            hookData.cell.styles.lineWidth = 0.3
+            hookData.cell.styles.cellPadding = { top: 8, bottom: 8, left: 8, right: 8 }
+          }
+          // Key Themes label
+          else if (text === 'Key Themes:') {
+            hookData.cell.styles.fontSize = 10
+            hookData.cell.styles.fontStyle = 'bold'
+            hookData.cell.styles.textColor = [91, 33, 182] as [number, number, number]
+            hookData.cell.styles.cellPadding = { top: 8, bottom: 3, left: 5, right: 5 }
+          }
+          // Individual theme bullets
+          else if (text.startsWith('- ')) {
+            hookData.cell.styles.fontSize = 9.5
+            hookData.cell.styles.textColor = [75, 85, 99] as [number, number, number]
+            hookData.cell.styles.cellPadding = { top: 2, bottom: 2, left: 10, right: 5 }
+          }
         }
       },
       margin: { left: margin, right: margin },
