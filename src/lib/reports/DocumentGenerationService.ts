@@ -283,73 +283,75 @@ export function generatePDFReport(data: ReportData): Blob {
 
   // ─── AI Insights (clearly labeled) ──────────────────────────
   if (data.aiInsightSummary || (data.aiThemes && data.aiThemes.length > 0)) {
+    checkPage(50)
 
-    // Build body rows: disclaimer, summary, themes label, each theme
-    const aiBody: string[][] = []
-    aiBody.push(['Note: AI-generated content for reference only. Does not affect scoring.'])
+    // Header bar — no bold, no special chars, just size + color
+    doc.setFillColor(237, 233, 254)
+    doc.rect(margin, y, 182, 10, 'F')
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(13)
+    doc.setTextColor(91, 33, 182)
+    doc.text('AI-Generated Insights', margin + 4, y + 7)
+    y += 14
+
+    // Disclaimer
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(120, 53, 165)
+    doc.text('Note: AI-generated content for reference only. Does not affect scoring.', margin, y)
+    y += 9
+
+    // Summary box
     if (data.aiInsightSummary) {
-      aiBody.push([data.aiInsightSummary])
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9.5)
+      doc.setTextColor(55, 20, 100)
+
+      const maxW = 172
+      const lines = doc.splitTextToSize(data.aiInsightSummary, maxW) as string[]
+      const lineH = 5.5
+      const padV = 7
+      const padH = 5
+      const boxH = lines.length * lineH + padV * 2
+
+      checkPage(boxH + 6)
+
+      doc.setFillColor(250, 245, 255)
+      doc.setDrawColor(196, 160, 250)
+      doc.setLineWidth(0.4)
+      doc.rect(margin, y, 182, boxH, 'FD')
+
+      lines.forEach((line, i) => {
+        doc.text(line, margin + padH, y + padV + lineH * 0.85 + i * lineH)
+      })
+
+      y += boxH + 8
+      doc.setLineWidth(0.2)
     }
+
+    // Themes
     if (data.aiThemes && data.aiThemes.length > 0) {
-      aiBody.push(['Key Themes:'])
-      data.aiThemes.forEach(t => aiBody.push(['- ' + t]))
+      checkPage(20)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10)
+      doc.setTextColor(91, 33, 182)
+      doc.text('Key Themes:', margin, y)
+      y += 7
+
+      doc.setFontSize(9.5)
+      doc.setTextColor(75, 85, 99)
+      data.aiThemes.forEach(theme => {
+        const tLines = doc.splitTextToSize('- ' + theme, 174) as string[]
+        checkPage(tLines.length * 6 + 4)
+        tLines.forEach((tl, i) => {
+          doc.text(tl, margin + 4, y + i * 6)
+        })
+        y += tLines.length * 6 + 2
+      })
+      y += 2
     }
 
-    autoTable(doc, {
-      startY: y,
-      head: [['AI-Generated Insights']],
-      body: aiBody,
-      theme: 'plain',
-      headStyles: {
-        fontSize: 13,
-        fontStyle: 'bold',
-        textColor: [91, 33, 182] as [number, number, number],
-        fillColor: [245, 243, 255] as [number, number, number],
-        cellPadding: { top: 6, bottom: 6, left: 5, right: 5 },
-      },
-      styles: {
-        fontSize: 10,
-        textColor: [55, 20, 100] as [number, number, number],
-        fillColor: [255, 255, 255] as [number, number, number],
-        overflow: 'linebreak',
-        cellPadding: { top: 5, bottom: 5, left: 5, right: 5 },
-      },
-      didParseCell: (hookData) => {
-        if (hookData.section === 'body') {
-          const text = hookData.cell.raw as string
-          // Disclaimer row
-          if (text.startsWith('Note:')) {
-            hookData.cell.styles.fontSize = 9
-            hookData.cell.styles.textColor = [120, 53, 165] as [number, number, number]
-            hookData.cell.styles.cellPadding = { top: 3, bottom: 8, left: 5, right: 5 }
-          }
-          // Summary paragraph — add background box
-          else if (!text.startsWith('Key Themes:') && !text.startsWith('- ')) {
-            hookData.cell.styles.fillColor = [250, 245, 255] as [number, number, number]
-            hookData.cell.styles.lineColor = [216, 180, 254] as [number, number, number]
-            hookData.cell.styles.lineWidth = 0.3
-            hookData.cell.styles.cellPadding = { top: 8, bottom: 8, left: 8, right: 8 }
-          }
-          // Key Themes label
-          else if (text === 'Key Themes:') {
-            hookData.cell.styles.fontSize = 10
-            hookData.cell.styles.fontStyle = 'bold'
-            hookData.cell.styles.textColor = [91, 33, 182] as [number, number, number]
-            hookData.cell.styles.cellPadding = { top: 8, bottom: 3, left: 5, right: 5 }
-          }
-          // Individual theme bullets
-          else if (text.startsWith('- ')) {
-            hookData.cell.styles.fontSize = 9.5
-            hookData.cell.styles.textColor = [75, 85, 99] as [number, number, number]
-            hookData.cell.styles.cellPadding = { top: 2, bottom: 2, left: 10, right: 5 }
-          }
-        }
-      },
-      margin: { left: margin, right: margin },
-    })
-
-    y = doc.lastAutoTable.finalY + 8
-    divider([216, 180, 254])
+    divider([196, 160, 250])
   }
 
   // ─── Recommended Next Actions ────────────────────────────────
