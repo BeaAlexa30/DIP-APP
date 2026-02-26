@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
-import Sidebar from '@/components/app/Sidebar'
+import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
+import Sidebar from '@/components/app/NavigationSidebar'
+import { ProfileProvider } from '@/components/app/UserProfileProvider'
+import type { UserProfile } from '@/lib/auth/UserPermissionDefinitions'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -19,14 +21,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
  if (!profile) {
     console.log('[layout] profile missing, upserting...')
-    // We cast 'as any' here to bypass the strict type check since we know the table structure
-    const { data: newProfile, error: upsertError } = await (serviceClient
+    // Upsert the user profile if it doesn't exist yet
+    const { data: newProfile, error: upsertError } = await serviceClient
       .from('profiles')
       .upsert({ 
         id: user.id, 
         email: user.email!, 
         role: 'analyst' 
-      } as any, { onConflict: 'id' }) as any)
+      }, { onConflict: 'id' })
       .select('full_name, role, email')
       .single()
     
@@ -34,13 +36,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     profile = newProfile
   }
 
+  const userProfile: UserProfile | null = profile
+    ? { full_name: profile.full_name, email: profile.email, role: profile.role as UserProfile['role'] }
+    : null
+
   return (
     // Changed: flex-col for mobile, flex-row for desktop
     <div className="flex flex-col md:flex-row h-screen bg-gray-950 text-white overflow-hidden">
-      <Sidebar profile={profile} />
-      <main className="flex-1 overflow-auto bg-gray-50 text-gray-900">
-        {children}
-      </main>
+      <Sidebar profile={userProfile} />
+      <ProfileProvider profile={userProfile}>
+        <main className="flex-1 overflow-auto bg-gray-50 text-gray-900">
+          {children}
+        </main>
+      </ProfileProvider>
     </div>
   )
 }

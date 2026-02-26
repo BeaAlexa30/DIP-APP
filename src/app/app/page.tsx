@@ -1,21 +1,24 @@
-// @ts-nocheck
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/ServerSideDbConnector'
+import { getCurrentProfile } from '@/lib/auth/UserProfileRetriever'
+import { can } from '@/lib/auth/UserPermissionDefinitions'
 import Link from 'next/link'
 
 export default async function AppDashboard() {
   const supabase = await createClient()
-  const serviceClient = await createServiceClient()
+  const profile = await getCurrentProfile()
+  const canCreate = can(profile?.role, 'createProject')
 
-  const [{ data: projects }, { data: surveys }, { count: responseCount }] = await Promise.all([
+  const [{ data: projects }, { count: projectCount }, { count: surveyCount }, { count: frameworkCount }] = await Promise.all([
     supabase.from('projects').select('id, client_name, status, created_at').order('created_at', { ascending: false }).limit(5),
-    supabase.from('surveys').select('id, status').eq('status', 'published'),
-    serviceClient.from('responses').select('id', { count: 'exact', head: true }),
+    supabase.from('projects').select('id', { count: 'exact', head: true }),
+    supabase.from('surveys').select('id, projects!inner(status)', { count: 'exact', head: true }).eq('status', 'published').neq('projects.status', 'archived'),
+    supabase.from('framework_packs').select('id', { count: 'exact', head: true }).eq('active', true),
   ])
 
   const stats = [
-    { label: 'Total Projects', value: projects?.length ?? 0, href: '/app/projects', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-    { label: 'Active Surveys', value: surveys?.length ?? 0, href: '/app/projects', color: 'bg-green-50 text-green-700 border-green-200' },
-    { label: 'Total Responses', value: responseCount ?? 0, href: '/app/projects', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+    { label: 'Total Projects', value: projectCount ?? 0, href: '/app/projects', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+    { label: 'Active Surveys', value: surveyCount ?? 0, href: '/app/projects', color: 'bg-green-50 text-green-700 border-green-200' },
+    { label: 'Framework Packs', value: frameworkCount ?? 0, href: '/app/frameworks', color: 'bg-purple-50 text-purple-700 border-purple-200' },
   ]
 
   return (
@@ -40,9 +43,11 @@ export default async function AppDashboard() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">Recent Projects</h2>
-          <Link href="/app/projects/new" className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
-            + New Project
-          </Link>
+          {canCreate && (
+            <Link href="/app/projects/new" className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
+              + New Project
+            </Link>
+          )}
         </div>
         <div className="divide-y divide-gray-50">
           {projects && projects.length > 0 ? (
@@ -70,8 +75,10 @@ export default async function AppDashboard() {
             ))
           ) : (
             <div className="px-6 py-10 text-center text-gray-400 text-sm">
-              No projects yet.{' '}
-              <Link href="/app/projects/new" className="text-blue-600 hover:underline">Create your first project</Link>
+              No projects yet.
+              {canCreate && (
+                <>{' '}<Link href="/app/projects/new" className="text-blue-600 hover:underline">Create your first project</Link></>
+              )}
             </div>
           )}
         </div>

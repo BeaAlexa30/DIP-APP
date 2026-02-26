@@ -1,10 +1,10 @@
-// @ts-nocheck
 'use client'
 
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/DatabaseClientManager'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { useCan } from '@/components/app/UserProfileProvider'
 
 const STAGE_OPTIONS = ['Discovery', 'Growth', 'Optimization', 'Retention', 'Turnaround']
 const CHANNEL_OPTIONS = ['Web', 'Mobile App', 'In-store', 'Phone/Call Center', 'Email', 'Social Media', 'Marketplace']
@@ -12,8 +12,24 @@ const CHANNEL_OPTIONS = ['Web', 'Mobile App', 'In-store', 'Phone/Call Center', '
 export default function NewProjectPage() {
   const router = useRouter()
   const supabase = createClient()
+  const canCreate = useCan('createProject')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  if (!canCreate) {
+    return (
+      <div className="p-8 max-w-2xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+          <p className="text-2xl mb-2">🔒</p>
+          <h2 className="text-lg font-semibold text-red-800 mb-1">Access Restricted</h2>
+          <p className="text-sm text-red-600">Only Admins can create new projects.</p>
+          <button onClick={() => router.push('/app/projects')} className="mt-4 text-sm text-blue-600 hover:underline">
+            ← Back to projects
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const [form, setForm] = useState({
     client_name: '',

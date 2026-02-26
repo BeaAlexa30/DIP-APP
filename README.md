@@ -109,8 +109,10 @@ Run each SQL file in order via **Supabase Dashboard > SQL Editor**:
 ```
 supabase/migrations/001_initial_schema.sql    ← Must run first (creates all tables)
 supabase/migrations/002_rls_policies.sql      ← Must run second (adds RLS)
-supabase/migrations/003_seed_framework_v1.sql ← Seed CX framework pack
+supabase/migrations/003_seed_framework_v1.sql ← Seed CX framework pack (original)
 supabase/migrations/004_helper_functions.sql  ← Helper functions + views
+supabase/migrations/005_report_shares.sql     ← Shareable report links feature
+supabase/migrations/006_additional_frameworks.sql ← 5 new professional frameworks
 ```
 
 ### Option B: Supabase CLI
@@ -128,6 +130,8 @@ psql "$DATABASE_URL" -f supabase/migrations/001_initial_schema.sql
 psql "$DATABASE_URL" -f supabase/migrations/002_rls_policies.sql
 psql "$DATABASE_URL" -f supabase/migrations/003_seed_framework_v1.sql
 psql "$DATABASE_URL" -f supabase/migrations/004_helper_functions.sql
+psql "$DATABASE_URL" -f supabase/migrations/005_report_shares.sql
+psql "$DATABASE_URL" -f supabase/migrations/006_additional_frameworks.sql
 ```
 
 ### Enable Row Level Security
@@ -191,9 +195,21 @@ Current test suite: **27 tests, all passing** in `src/lib/scoring/__tests__/engi
 
 ## Seeding the Framework
 
-Migration `003_seed_framework_v1.sql` automatically seeds:
+Migration `003_seed_framework_v1.sql` seeds the original MVP framework:
 
 **Framework Pack:** "Customer Experience Decision Intelligence" (v1.0)
+
+Migration `006_additional_frameworks.sql` adds 5 professional frameworks:
+
+1. **Employee Experience & Engagement** - HR & organizational health
+2. **SaaS Product Adoption & Retention** - B2B SaaS customer health
+3. **E-commerce Conversion Optimization** - Online retail optimization
+4. **Mobile App User Experience** - Mobile app performance & engagement
+5. **B2B Sales Process Experience** - Enterprise sales journey mapping
+
+See [FRAMEWORK_GUIDE.md](./FRAMEWORK_GUIDE.md) for complete framework documentation.
+
+**Original Framework Details:**
 
 | # | Category | Weight | Questions |
 |---|---|---|---|

@@ -1,6 +1,8 @@
-// @ts-nocheck
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
+import { getCurrentProfile } from '@/lib/auth/UserProfileRetriever'
+import { can } from '@/lib/auth/UserPermissionDefinitions'
 import Link from 'next/link'
+import ProjectRow from '@/components/app/ProjectTableRow'
 
 const statusColors: Record<string, string> = {
   draft: 'bg-yellow-100 text-yellow-700',
@@ -9,13 +11,43 @@ const statusColors: Record<string, string> = {
   archived: 'bg-gray-100 text-gray-500',
 }
 
+const surveyStatusColors: Record<string, string> = {
+  draft: 'bg-yellow-50 text-yellow-600',
+  published: 'bg-green-50 text-green-600',
+  closed: 'bg-gray-50 text-gray-600',
+}
+
 export default async function ProjectsPage() {
   const supabase = await createClient()
+  const serviceClient = await createServiceClient()
+  const profile = await getCurrentProfile()
+  const canCreate = can(profile?.role, 'createProject')
 
-  const { data: projects } = await supabase
+  const { data: projects } = await serviceClient
     .from('projects')
-    .select('id, client_name, industry, goal, status, created_at')
+    .select(`
+      id, 
+      client_name, 
+      industry, 
+      goal, 
+      status, 
+      created_at,
+      surveys(id, status)
+    `)
     .order('created_at', { ascending: false })
+
+  // Count surveys for each project
+  const projectsWithCounts = (projects ?? []).map((p) => {
+    const surveys = (p.surveys ?? []) as unknown as Array<{ id: string; status: string }>
+    const surveyCount = surveys.length
+    const survey = surveys[0]
+    
+    return {
+      ...p,
+      survey_status: survey?.status ?? null,
+      survey_count: surveyCount,
+    }
+  })
 
   return (
     <div className="p-8">
@@ -24,16 +56,18 @@ export default async function ProjectsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
           <p className="text-gray-500 text-sm mt-1">Manage client intake projects</p>
         </div>
-        <Link
-          href="/app/projects/new"
-          className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + New Project
-        </Link>
+        {canCreate && (
+          <Link
+            href="/app/projects/new"
+            className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            + New Project
+          </Link>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {projects && projects.length > 0 ? (
+        {projectsWithCounts && projectsWithCounts.length > 0 ? (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -41,33 +75,14 @@ export default async function ProjectsPage() {
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Industry</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Goal</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Survey</th>
+                <th className="text-center px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Framework Survey</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Created</th>
-                <th className="px-6 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {projects.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-gray-900">{p.client_name}</td>
-                  <td className="px-6 py-4 text-gray-500">{p.industry ?? '—'}</td>
-                  <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{p.goal ?? '—'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[p.status] ?? ''}`}>
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-400 text-xs">
-                    {new Date(p.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <Link
-                      href={`/app/projects/${p.id}`}
-                      className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                    >
-                      View →
-                    </Link>
-                  </td>
-                </tr>
+              {projectsWithCounts.map(p => (
+                <ProjectRow key={p.id} project={p} />
               ))}
             </tbody>
           </table>

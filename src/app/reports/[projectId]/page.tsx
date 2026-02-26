@@ -1,11 +1,23 @@
-// @ts-nocheck
 import { notFound, redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import ReportExportButton from '@/components/reports/ReportExportButton'
-import type { ScoringResult } from '@/lib/scoring/engine'
+import { createClient } from '@/lib/supabase/ServerSideDbConnector'
+import type { Database } from '@/types/DatabaseSchemaDefinitions'
+import ReportExportButton from '@/components/reports/ReportDownloadController'
+import ShareReportButton from '@/components/reports/ReportSharingManager'
+import type { ScoringResult } from '@/lib/scoring/AssessmentScoringEngine'
 
-export default async function ReportPage({ params }: { params: Promise<{ projectId: string }> }) {
+type ScoreResultWithCategory = Database['public']['Tables']['score_results']['Row'] & {
+  framework_categories: { name: string } | null
+}
+
+export default async function ReportPage({ 
+  params,
+  searchParams 
+}: { 
+  params: Promise<{ projectId: string }>
+  searchParams: Promise<{ surveyId?: string }>
+}) {
   const { projectId } = await params
+  const { surveyId } = await searchParams
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -19,13 +31,26 @@ export default async function ReportPage({ params }: { params: Promise<{ project
 
   if (!project) notFound()
 
-  const { data: survey } = await supabase
-    .from('surveys')
-    .select('id, pack_version_snapshot')
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+  // Get survey - either by surveyId param or latest survey for the project
+  let survey
+  if (surveyId) {
+    const { data } = await supabase
+      .from('surveys')
+      .select('id, pack_version_snapshot')
+      .eq('id', surveyId)
+      .eq('project_id', projectId) // Ensure survey belongs to this project
+      .single()
+    survey = data
+  } else {
+    const { data } = await supabase
+      .from('surveys')
+      .select('id, pack_version_snapshot')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    survey = data
+  }
 
   if (!survey) {
     return (
@@ -67,9 +92,9 @@ export default async function ReportPage({ params }: { params: Promise<{ project
     checksum: scoreRun.checksum,
     responseCount: scoreRun.response_count,
     executedAt: new Date(scoreRun.executed_at),
-    categoryScores: (categoryResults ?? []).map(r => ({
+    categoryScores: ((categoryResults ?? []) as unknown as ScoreResultWithCategory[]).map(r => ({
       categoryId: r.category_id,
-      categoryName: (r.framework_categories as any)?.name ?? r.category_id,
+      categoryName: (r as ScoreResultWithCategory).framework_categories?.name ?? r.category_id,
       rawScore: r.raw_score,
       minPossible: r.min_possible,
       maxPossible: r.max_possible,
@@ -104,6 +129,10 @@ export default async function ReportPage({ params }: { params: Promise<{ project
             </p>
           </div>
           <div className="flex gap-3">
+            <ShareReportButton
+              projectId={project.id}
+              scoreRunId={scoring.scoreRunId}
+            />
             <ReportExportButton
               projectName={project.client_name}
               industry={project.industry}

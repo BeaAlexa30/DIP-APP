@@ -1,13 +1,39 @@
 import { notFound } from 'next/navigation'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
+import type { Database } from '@/types/DatabaseSchemaDefinitions'
+import type { Metadata } from 'next'
 import Link from 'next/link'
-import IndexScoreCard from '@/components/dashboard/IndexScoreCard'
-import IssueRankingTable from '@/components/dashboard/IssueRankingTable'
-import CategoryChart from '@/components/dashboard/CategoryChart'
-import GenerateInsightsButton from '@/components/dashboard/GenerateInsightsButton'
+import IndexScoreCard from '@/components/dashboard/MetricsOverviewCard'
+import IssueRankingTable from '@/components/dashboard/PriorityIssuesDisplay'
+import CategoryChart from '@/components/dashboard/AnalyticsCategoryVisualizer'
+import GenerateInsightsButton from '@/components/dashboard/AIInsightGenerator'
+import ScoreRunHistory from '@/components/dashboard/ExecutionHistoryTracker'
+import DateRangeFilter from '@/components/dashboard/TimeperiodSelector'
+import FrameworkSelector from '@/components/dashboard/AssessmentFrameworkPicker'
 
-export default async function ProjectDashboard({ params }: { params: Promise<{ id: string }> }) {
+export const metadata: Metadata = {
+  title: "Decision Dashboard - Decision Intelligence Platform",
+  description: "View analytics and insights from your survey results",
+  openGraph: {
+    title: "Decision Dashboard - Decision Intelligence Platform",
+    description: "View analytics and insights from your survey results",
+    images: ['/images/PlatformBrandingLogo.png'],
+  },
+}
+
+type ScoreResultWithCategory = Database['public']['Tables']['score_results']['Row'] & {
+  framework_categories: { name: string } | null
+}
+
+export default async function ProjectDashboard({ 
+  params,
+  searchParams 
+}: { 
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ surveyId?: string; runId?: string; startDate?: string; endDate?: string }>
+}) {
   const { id } = await params
+  const { surveyId, runId, startDate, endDate } = await searchParams
   const supabase = await createClient()
   const serviceClient = await createServiceClient()
 
@@ -15,18 +41,30 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
     .from('projects')
     .select('id, client_name, industry')
     .eq('id', id)
-    .single() as { data: any }
+    .single()
 
   if (!project) notFound()
 
-  // Get latest survey + score run
-  const { data: survey } = await serviceClient
-    .from('surveys')
-    .select('id, pack_version_snapshot')
-    .eq('project_id', id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single() as { data: any }
+  // Get survey - either by surveyId param or latest survey for the project
+  let survey
+  if (surveyId) {
+    const { data } = await serviceClient
+      .from('surveys')
+      .select('id, pack_version_snapshot, pack_id')
+      .eq('id', surveyId)
+      .eq('project_id', id) // Ensure survey belongs to this project
+      .single()
+    survey = data
+  } else {
+    const { data } = await serviceClient
+      .from('surveys')
+      .select('id, pack_version_snapshot, pack_id')
+      .eq('project_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    survey = data
+  }
 
   if (!survey) {
     return (
@@ -39,13 +77,36 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
     )
   }
 
-  const { data: scoreRun } = await serviceClient
+  // Get all surveys for framework selector
+  const { data: allSurveys } = await serviceClient
+    .from('surveys')
+    .select('id, pack_id, pack_version_snapshot')
+    .eq('project_id', id)
+    .order('created_at', { ascending: false })
+
+  // Fetch all score runs for history
+  const { data: allScoreRuns } = await serviceClient
     .from('score_runs')
     .select('id, executed_at, checksum, response_count, framework_version')
-    .eq('survey_id', (survey as any).id)
+    .eq('survey_id', survey.id)
     .order('executed_at', { ascending: false })
-    .limit(1)
-    .single() as { data: any }
+
+  let scoreRuns = allScoreRuns ?? []
+
+  // Apply date range filter if provided
+  if (startDate || endDate) {
+    scoreRuns = scoreRuns.filter(run => {
+      const runDate = new Date(run.executed_at)
+      if (startDate && runDate < new Date(startDate)) return false
+      if (endDate && runDate > new Date(endDate + 'T23:59:59')) return false
+      return true
+    })
+  }
+
+  // Determine which score run to display
+  const scoreRun = runId 
+    ? scoreRuns.find(r => r.id === runId) ?? scoreRuns[0]
+    : scoreRuns[0]
 
   if (!scoreRun) {
     return (
@@ -59,13 +120,13 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
     )
   }
 
-  const scoreRunId = (scoreRun as any).id
+  const scoreRunId = scoreRun.id
 
   // Fetch live response count directly — sourceOfTruth
   const liveCount = ((await serviceClient
     .from('responses')
     .select('id', { count: 'exact', head: true })
-    .eq('survey_id', (survey as any).id)
+    .eq('survey_id', survey.id)
   ).count ?? 0)
 
   const [execRes, indexRes, catRes, issueRes, aiRes] =
@@ -76,11 +137,29 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
       serviceClient.from('issue_rankings').select('*').eq('score_run_id', scoreRunId).order('priority_score', { ascending: false }),
       serviceClient.from('ai_insights').select('*').eq('score_run_id', scoreRunId).order('created_at', { ascending: false }).limit(1).single(),
     ])
-  const execResult = execRes.data as any
-  const indexResults = indexRes.data as any[]
-  const categoryResults = catRes.data as any[]
-  const issueRankings = issueRes.data as any[]
-  const aiInsights = aiRes.data as any
+  const execResult = execRes.data
+  const indexResults = indexRes.data ?? []
+  const categoryResults = (catRes.data ?? []) as unknown as ScoreResultWithCategory[]
+  const issueRankings = issueRes.data ?? []
+
+  // Prepare score runs with health scores for history
+  const scoreRunsWithHealth = await Promise.all(
+    scoreRuns.map(async (run) => {
+      const { data: exec } = await serviceClient
+        .from('executive_results')
+        .select('health_score_0_100')
+        .eq('score_run_id', run.id)
+        .single()
+      return {
+        id: run.id,
+        executed_at: run.executed_at,
+        response_count: run.response_count,
+        checksum: run.checksum,
+        health_score: exec?.health_score_0_100 ?? 0,
+      }
+    })
+  )
+  const aiInsights = aiRes.data
 
   const healthScore = execResult?.health_score_0_100 ?? 0
   const healthColor = healthScore >= 75 ? 'text-green-600' : healthScore >= 50 ? 'text-yellow-500' : 'text-red-600'
@@ -88,7 +167,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
   const healthLabel = healthScore >= 75 ? 'Healthy' : healthScore >= 50 ? 'Needs Attention' : 'At Risk'
 
   return (
-    <div className="p-4 md:p-8"> {/* Responsive padding */}
+    <div className="p-4 md:p-8">
       {/* Header: Vertical on mobile, Horizontal on desktop */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -97,16 +176,40 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Decision Dashboard</h1>
           <p className="text-gray-500 text-sm mt-0.5">
-            Framework v{scoreRun.framework_version} · {liveCount} response{liveCount !== 1 ? 's' : ''}
+            {(survey.pack_version_snapshot as any)?.packName ?? 'Framework'} v{scoreRun.framework_version} · {liveCount} response{liveCount !== 1 ? 's' : ''}
           </p>
         </div>
-        <Link
-          href={`/reports/${id}`}
-          className="w-full sm:w-auto text-center bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-        >
-          Export Report →
-        </Link>
+        <div className="flex gap-3">
+          <DateRangeFilter projectId={id} />
+          {scoreRunsWithHealth.length > 1 && (
+            <ScoreRunHistory 
+              scoreRuns={scoreRunsWithHealth} 
+              currentRunId={scoreRun.id}
+              projectId={id}
+              surveyId={survey.id}
+            />
+          )}
+          <Link
+            href={`/reports/${id}?surveyId=${survey.id}`}
+            className="w-full sm:w-auto text-center bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            Export Report →
+          </Link>
+        </div>
       </div>
+
+      {/* Framework Selector */}
+      {allSurveys && allSurveys.length > 1 && (
+        <FrameworkSelector
+          surveys={allSurveys.map(s => ({
+            id: s.id,
+            pack_id: s.pack_id,
+            pack_version_snapshot: s.pack_version_snapshot as any
+          }))}
+          currentSurveyId={survey.id}
+          projectId={id}
+        />
+      )}
 
       {/* Warning: no live responses — stale score run */}
       {liveCount === 0 && (
@@ -174,7 +277,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
           <div className="p-4 md:p-6">
             <CategoryChart
               categories={(categoryResults ?? []).map(r => ({
-                name: (r.framework_categories as any)?.name ?? r.category_id,
+                name: r.framework_categories?.name ?? r.category_id,
                 score: r.normalized_score,
               }))}
             />
@@ -188,10 +291,10 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="text-purple-600 font-semibold text-sm">
-                {(aiInsights.model_metadata as any)?.model === 'deterministic-fallback' ? 'Rule-Based Summary' : 'AI Summary'}
+                {(aiInsights.model_metadata as { model?: string })?.model === 'deterministic-fallback' ? 'Rule-Based Summary' : 'AI Summary'}
               </span>
               <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium">Non-Scoring</span>
-              {(aiInsights.model_metadata as any)?.model === 'deterministic-fallback' && (
+              {(aiInsights.model_metadata as { model?: string })?.model === 'deterministic-fallback' && (
                 <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-0.5 rounded-full font-medium">
                   ⚠ AI quota exhausted — auto-generated from scores
                 </span>

@@ -13,8 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
   title: "Decision Intelligence Platform",
   description: "DIP — Convert client feedback into business decisions",
+  openGraph: {
+    title: "Decision Intelligence Platform",
+    description: "DIP — Convert client feedback into business decisions",
+    images: ['/images/PlatformBrandingLogo.png'],
+  },
 };
 
 export default function RootLayout({

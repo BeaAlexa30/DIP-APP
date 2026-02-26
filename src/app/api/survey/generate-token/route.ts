@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
+import { requirePermission } from '@/lib/auth/AccessControlGuard'
 
 export async function POST(req: NextRequest) {
+  const auth = await requirePermission('assignFramework')
+  if (!auth.ok) return auth.response
+
   try {
     const { surveyId } = await req.json()
     if (!surveyId) return NextResponse.json({ error: 'surveyId required' }, { status: 400 })
