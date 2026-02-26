@@ -285,19 +285,27 @@ export function generatePDFReport(data: ReportData): Blob {
   if (data.aiInsightSummary || (data.aiThemes && data.aiThemes.length > 0)) {
     checkPage(50)
 
-    // Strip any non-Latin1 characters from AI text to prevent encoding corruption
+    // Strip everything outside printable 7-bit ASCII — jsPDF Latin-1 codec
+    // corrupts any multi-byte UTF-8 chars (bullets, em-dashes, curly quotes etc.)
     const sanitize = (s: string) =>
-      s.replace(/[^\x20-\x7E\xA0-\xFF]/g, '').replace(/^[\s\-\*\u2022\u2023\u25E6\u2043]+/, '').trim()
+      s.replace(/[^\x20-\x7E]/g, ' ').replace(/\s{2,}/g, ' ').trim()
 
-    // Header — use addTitle so font state is cleanly reset (same as other working sections)
-    addTitle('AI-Generated Insights', 12, [91, 33, 182])
+    // Explicitly reset font to normal BEFORE drawing anything in this section
+    // (autoTable above may leave bold state that corrupts next text draw)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(13)
+    doc.setTextColor(91, 33, 182)
+    doc.setFillColor(237, 233, 254)
+    doc.rect(margin, y, 182, 11, 'F')
+    doc.text('AI-Generated Insights', margin + 4, y + 7.5)
+    y += 15
 
     // Disclaimer
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
+    doc.setFontSize(8)
     doc.setTextColor(120, 53, 165)
     doc.text('Note: AI-generated content for reference only. Does not affect scoring.', margin, y)
-    y += 9
+    y += 8
 
     // Summary box
     if (data.aiInsightSummary) {
@@ -306,10 +314,11 @@ export function generatePDFReport(data: ReportData): Blob {
       doc.setFontSize(9)
       doc.setTextColor(55, 20, 100)
 
-      const lines = doc.splitTextToSize(cleanSummary, 176) as string[]
+      const lines = doc.splitTextToSize(cleanSummary, 172) as string[]
       const lineH = 5.5
-      const padV = 6
-      const boxH = lines.length * lineH + padV * 2
+      const padTop = 6
+      const padBot = 6
+      const boxH = padTop + lines.length * lineH + padBot
 
       checkPage(boxH + 8)
 
@@ -318,10 +327,11 @@ export function generatePDFReport(data: ReportData): Blob {
       doc.setLineWidth(0.4)
       doc.rect(margin, y, 182, boxH, 'FD')
       doc.setLineWidth(0.2)
+      doc.setTextColor(55, 20, 100)
 
-      lines.forEach((line, i) => {
-        doc.text(line, margin + 4, y + padV + (i + 1) * lineH - 1)
-      })
+      for (let i = 0; i < lines.length; i++) {
+        doc.text(lines[i], margin + 5, y + padTop + i * lineH + 4)
+      }
 
       y += boxH + 8
     }
@@ -339,16 +349,16 @@ export function generatePDFReport(data: ReportData): Blob {
       doc.setFontSize(9)
       doc.setTextColor(60, 60, 60)
 
-      data.aiThemes.forEach(theme => {
+      for (const theme of data.aiThemes) {
         const cleanTheme = sanitize(theme)
-        if (!cleanTheme) return
-        const tLines = doc.splitTextToSize('- ' + cleanTheme, 174) as string[]
+        if (!cleanTheme) continue
+        const tLines = doc.splitTextToSize('- ' + cleanTheme, 172) as string[]
         checkPage(tLines.length * 5.5 + 4)
-        tLines.forEach((tl, i) => {
-          doc.text(tl, margin + 3, y + i * 5.5)
-        })
+        for (let i = 0; i < tLines.length; i++) {
+          doc.text(tLines[i], margin + 3, y + i * 5.5)
+        }
         y += tLines.length * 5.5 + 3
-      })
+      }
       y += 2
     }
 
