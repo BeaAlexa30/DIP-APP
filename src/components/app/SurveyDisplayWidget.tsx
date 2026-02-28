@@ -35,9 +35,12 @@ interface SurveyCardProps {
   projectId: string
   responseCount: number
   latestScoreRun: ScoreRun | null
+  projectArchived?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
 }
 
-export default function SurveyCard({ survey, projectId, responseCount, latestScoreRun }: SurveyCardProps) {
+export default function SurveyCard({ survey, projectId, responseCount, latestScoreRun, projectArchived = false, selected, onToggleSelect }: SurveyCardProps) {
   const router = useRouter()
   const [tokenCopied, setTokenCopied] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -72,10 +75,22 @@ export default function SurveyCard({ survey, projectId, responseCount, latestSco
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className={`bg-white rounded-xl border overflow-hidden transition-shadow ${
+      selected ? 'border-blue-400 shadow-md shadow-blue-100' : 'border-gray-200'
+    }`}>
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
-        <div className="flex items-start justify-between">
+      <div className="relative px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
+        {/* Selection Checkbox */}
+        {onToggleSelect !== undefined && (
+          <input
+            type="checkbox"
+            checked={selected ?? false}
+            onChange={onToggleSelect}
+            onClick={e => e.stopPropagation()}
+            className="absolute top-4 left-3 w-4 h-4 accent-blue-600 cursor-pointer"
+          />
+        )}
+        <div className={`flex items-start justify-between ${onToggleSelect !== undefined ? 'pl-5' : ''}`}>
           <div>
             <h3 className="text-sm font-semibold text-gray-900">{frameworkName}</h3>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -167,6 +182,8 @@ export default function SurveyCard({ survey, projectId, responseCount, latestSco
               surveyId={survey.id}
               frameworkVersion={survey.pack_version_snapshot?.version || 'v1.0'}
               lastRunAt={latestScoreRun?.executed_at || null}
+              responseCount={responseCount}
+              previousResponseCount={latestScoreRun?.response_count ?? undefined}
             />
           )}
 
@@ -179,6 +196,7 @@ export default function SurveyCard({ survey, projectId, responseCount, latestSco
           <SurveyStatusControl 
             surveyId={survey.id}
             currentStatus={survey.status as 'draft' | 'published' | 'closed'}
+            projectArchived={projectArchived}
           />
         </div>
       </div>

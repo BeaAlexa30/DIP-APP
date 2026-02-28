@@ -12,6 +12,8 @@ interface Props {
   scoring: ScoringResult
   aiInsightSummary?: string
   aiThemes?: string[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fullAnalysis?: Record<string, any>
 }
 
 export default function ReportExportButton({
@@ -22,6 +24,7 @@ export default function ReportExportButton({
   scoring,
   aiInsightSummary,
   aiThemes,
+  fullAnalysis,
 }: Props) {
   const [loading, setLoading] = useState(false)
 
@@ -38,6 +41,7 @@ export default function ReportExportButton({
         scoring,
         aiInsightSummary,
         aiThemes,
+        fullAnalysis,
       })
 
       const url = URL.createObjectURL(blob)
@@ -46,6 +50,13 @@ export default function ReportExportButton({
       a.download = `DIP-Report-${projectName.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`
       a.click()
       URL.revokeObjectURL(url)
+
+      // Log export event (fire-and-forget)
+      fetch('/api/activity/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'export_pdf', details: { projectName, frameworkVersion } }),
+      }).catch(() => {})
     } finally {
       setLoading(false)
     }

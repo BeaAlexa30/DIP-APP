@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/ServerSideDbConnector'
+import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
 import type { Database } from '@/types/DatabaseSchemaDefinitions'
 import ReportExportButton from '@/components/reports/ReportDownloadController'
 import ShareReportButton from '@/components/reports/ReportSharingManager'
@@ -22,6 +22,14 @@ export default async function ReportPage({
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  const serviceClient = await createServiceClient()
+  const { data: profile } = await serviceClient
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+  const isAdmin = profile?.role === 'admin'
 
   const { data: project } = await supabase
     .from('projects')
@@ -94,7 +102,7 @@ export default async function ReportPage({
     executedAt: new Date(scoreRun.executed_at),
     categoryScores: ((categoryResults ?? []) as unknown as ScoreResultWithCategory[]).map(r => ({
       categoryId: r.category_id,
-      categoryName: (r as ScoreResultWithCategory).framework_categories?.name ?? r.category_id,
+      categoryName: r.ai_category_name ?? (r as ScoreResultWithCategory).framework_categories?.name ?? r.category_id ?? '',
       rawScore: r.raw_score,
       minPossible: r.min_possible,
       maxPossible: r.max_possible,
@@ -129,10 +137,12 @@ export default async function ReportPage({
             </p>
           </div>
           <div className="flex gap-3">
-            <ShareReportButton
-              projectId={project.id}
-              scoreRunId={scoring.scoreRunId}
-            />
+            {isAdmin && (
+              <ShareReportButton
+                projectId={project.id}
+                scoreRunId={scoring.scoreRunId}
+              />
+            )}
             <ReportExportButton
               projectName={project.client_name}
               industry={project.industry}
@@ -206,7 +216,7 @@ export default async function ReportPage({
             </thead>
             <tbody className="divide-y divide-gray-50">
               {scoring.categoryScores.map(cs => (
-                <tr key={cs.categoryId}>
+                <tr key={cs.categoryId ?? cs.categoryName}>
                   <td className="px-6 py-3 text-gray-700">{cs.categoryName}</td>
                   <td className="px-6 py-3 text-right text-gray-500">{cs.rawScore.toFixed(2)}</td>
                   <td className="px-6 py-3 text-right text-gray-400">{cs.minPossible.toFixed(2)}</td>

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
 import type { Database } from '@/types/DatabaseSchemaDefinitions'
-import { generateAIInsights } from '@/lib/ai/IntelligenceAnalyticsProcessor'
+import { generateAIInsights, generateFallbackInsights } from '@/lib/ai/IntelligenceAnalyticsProcessor'
 import type { ScoringResult } from '@/lib/scoring/AssessmentScoringEngine'
 import { requirePermission } from '@/lib/auth/AccessControlGuard'
 
 type ScoreResultWithCategory = Database['public']['Tables']['score_results']['Row'] & {
+  ai_category_name: string | null
   framework_categories: { name: string } | null
 }
 
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     executedAt: new Date(runRes.data.executed_at),
     categoryScores: ((catsRes.data ?? []) as unknown as ScoreResultWithCategory[]).map(r => ({
       categoryId: r.category_id,
-      categoryName: r.framework_categories?.name ?? r.category_id,
+      categoryName: r.ai_category_name ?? r.framework_categories?.name ?? r.category_id ?? '',
       rawScore: r.raw_score,
       minPossible: r.min_possible,
       maxPossible: r.max_possible,
@@ -70,7 +71,16 @@ export async function POST(req: NextRequest) {
       score_run_id: scoreRunId,
       summary_text: insights.summaryText,
       themes_json: insights.themes,
-      model_metadata: insights.modelMetadata,
+      model_metadata: {
+        ...insights.modelMetadata,
+        fullAnalysis: {
+          descriptive: insights.descriptive,
+          diagnostic: insights.diagnostic,
+          predictive: insights.predictive,
+          prescriptive: insights.prescriptive,
+          kpi: insights.kpi,
+        },
+      } as any,
     })
 
     if (insertErr) {
@@ -81,13 +91,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(insights)
   } catch (err: any) {
     console.error('[insights] generation error:', err)
-    const is429 = err.message?.includes('429') || err.message?.includes('Too Many Requests') || err.message?.includes('quota')
-    if (is429) {
-      return NextResponse.json(
-        { error: 'Gemini API quota exceeded. Please wait a minute and try again, or upgrade your Google AI plan at https://ai.dev/rate-limit' },
-        { status: 429 }
-      )
+    // Groq-specific errors — fall back to deterministic analysis
+    console.warn('[insights] falling back to deterministic analysis:', err.message)
+    try {
+      const fallback = generateFallbackInsights(scoring)
+      const { error: insertErr } = await db.from('ai_insights').insert({
+        score_run_id: scoreRunId,
+        summary_text: fallback.summaryText,
+        themes_json: fallback.themes,
+        model_metadata: {
+          ...fallback.modelMetadata,
+          fullAnalysis: {
+            descriptive: fallback.descriptive,
+            diagnostic: fallback.diagnostic,
+            predictive: fallback.predictive,
+            prescriptive: fallback.prescriptive,
+            kpi: fallback.kpi,
+          },
+        } as any,
+      })
+      if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
+      return NextResponse.json(fallback)
+    } catch (fbErr: any) {
+      return NextResponse.json({ error: err.message }, { status: 500 })
     }
-    return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

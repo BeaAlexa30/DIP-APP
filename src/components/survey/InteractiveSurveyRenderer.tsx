@@ -3,18 +3,23 @@
 import { useState } from 'react'
 
 interface Option { id: string; label: string; value_key: string; order: number }
-interface Question { id: string; type: string; prompt: string; required: boolean; order: number; options: Option[] }
+interface Question {
+  id: string; type: string; prompt: string; required: boolean; order: number; options: Option[]
+  scaleMin?: number; scaleMax?: number; minLabel?: string; maxLabel?: string
+}
 interface Category { id: string; name: string; order: number; questions: Question[] }
-interface Snapshot { packName: string; version: string; categories: Category[] }
+interface Snapshot { packName: string; version: string; categories: Category[]; ai_generated?: boolean }
 
 export default function SurveyFlow({
   surveyId,
   tokenId,
   snapshot,
+  isAiSurvey,
 }: {
   surveyId: string
   tokenId: string
   snapshot: Snapshot
+  isAiSurvey?: boolean
 }) {
   // Flatten all questions in order
   const allQuestions: (Question & { categoryName: string })[] = snapshot.categories
@@ -59,15 +64,28 @@ export default function SurveyFlow({
     setError(null)
 
     const completionTime = Math.round((Date.now() - startTime) / 1000)
+    const aiSurvey = isAiSurvey || snapshot.ai_generated
 
-    // Build answer array
-    const answerRows = Object.entries(answers).map(([questionId, valueKey]) => ({
-      questionId,
-      valueKey,
-    }))
+    const endpoint = aiSurvey
+      ? '/api/assessments/submit-ai-response'
+      : '/api/assessments/submit-response'
 
-    // Submit via server API route (uses service client, bypasses RLS issues)
-    const res = await fetch('/api/assessments/submit-response', {
+    // For AI surveys include prompt text + free_text support; for standard use valueKey only
+    const answerRows = allQuestions
+      .filter(q => answers[q.id] !== undefined)
+      .map(q => {
+        if (aiSurvey) {
+          return {
+            questionId: q.id,
+            questionPrompt: q.prompt,
+            valueKey: q.type !== 'text' ? answers[q.id] : undefined,
+            freeText: q.type === 'text' ? answers[q.id] : undefined,
+          }
+        }
+        return { questionId: q.id, valueKey: answers[q.id] }
+      })
+
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -166,50 +184,60 @@ export default function SurveyFlow({
 
               {/* Scale Questions - Numeric Rating */}
               {current.type === 'scale' && (() => {
-                // Parse scale range - match various dash types: hyphen, en-dash, em-dash, minus
-                const rangeMatch = current.prompt.match(/(\d+)\s*[\-–—−to]+\s*(\d+)(%)?/i)
-                
-                let min = 0
-                let max = 10
+                // Use snapshot fields if available (AI surveys), else parse from prompt
+                let min: number
+                let max: number
+                let leftLabel: string
+                let rightLabel: string
                 let isPercentage = false
-                
-                if (rangeMatch) {
-                  min = parseInt(rangeMatch[1])
-                  max = parseInt(rangeMatch[2])
-                  isPercentage = rangeMatch[3] === '%'
+
+                if (current.scaleMin !== undefined && current.scaleMax !== undefined) {
+                  min = current.scaleMin
+                  max = current.scaleMax
+                  leftLabel = current.minLabel ?? 'Low'
+                  rightLabel = current.maxLabel ?? 'High'
+                } else {
+                  // Parse scale range - match various dash types: hyphen, en-dash, em-dash, minus
+                  const rangeMatch = current.prompt.match(/(\d+)\s*[\-–—−to]+\s*(\d+)(%)?/i)
+                  min = 0
+                  max = 10
+                  if (rangeMatch) {
+                    min = parseInt(rangeMatch[1])
+                    max = parseInt(rangeMatch[2])
+                    isPercentage = rangeMatch[3] === '%'
+                  }
+                  // Determine labels based on scale type
+                  leftLabel = 'Low'
+                  rightLabel = 'High'
+                  if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('recommend')) {
+                    leftLabel = 'Not likely'
+                    rightLabel = 'Very likely'
+                  } else if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('renew')) {
+                    leftLabel = 'Not likely'
+                    rightLabel = 'Very likely'
+                  } else if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('shop again')) {
+                    leftLabel = 'Not likely'
+                    rightLabel = 'Very likely'
+                  } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('intuitive')) {
+                    leftLabel = 'Very Confusing'
+                    rightLabel = 'Very Intuitive'
+                  } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('satisfied')) {
+                    leftLabel = 'Very unsatisfied'
+                    rightLabel = 'Very satisfied'
+                  } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('rate')) {
+                    leftLabel = 'Poor'
+                    rightLabel = 'Excellent'
+                  } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('value')) {
+                    leftLabel = 'Poor value'
+                    rightLabel = 'Great value'
+                  } else if (isPercentage) {
+                    leftLabel = '0%'
+                    rightLabel = '100%'
+                  }
                 }
-                
+
                 // Generate scale values
                 const scaleValues = Array.from({ length: max - min + 1 }, (_, i) => min + i)
-                
-                // Determine labels based on scale type
-                let leftLabel = 'Low'
-                let rightLabel = 'High'
-                if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('recommend')) {
-                  leftLabel = 'Not likely'
-                  rightLabel = 'Very likely'
-                } else if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('renew')) {
-                  leftLabel = 'Not likely'
-                  rightLabel = 'Very likely'
-                } else if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('shop again')) {
-                  leftLabel = 'Not likely'
-                  rightLabel = 'Very likely'
-                } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('intuitive')) {
-                  leftLabel = 'Very Confusing'
-                  rightLabel = 'Very Intuitive'
-                } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('satisfied')) {
-                  leftLabel = 'Very unsatisfied'
-                  rightLabel = 'Very satisfied'
-                } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('rate')) {
-                  leftLabel = 'Poor'
-                  rightLabel = 'Excellent'
-                } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('value')) {
-                  leftLabel = 'Poor value'
-                  rightLabel = 'Great value'
-                } else if (isPercentage) {
-                  leftLabel = '0%'
-                  rightLabel = '100%'
-                }
 
                 // Determine grid class based on scale length
                 let gridClass = 'grid gap-2'

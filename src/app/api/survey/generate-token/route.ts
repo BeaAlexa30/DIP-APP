@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
 import { requirePermission } from '@/lib/auth/AccessControlGuard'
+import { logActivity, getUserInfo } from '@/lib/activity/ActivityLogger'
 
 export async function POST(req: NextRequest) {
   const auth = await requirePermission('assignFramework')
@@ -36,6 +37,10 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    getUserInfo(auth.userId).then(u =>
+      logActivity({ userId: auth.userId, userEmail: u.email, userName: u.name, action: 'create_survey_token', details: { surveyId } })
+    )
 
     return NextResponse.json({ token: data.token })
   } catch (err: any) {

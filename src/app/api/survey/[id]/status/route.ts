@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
 import { requirePermission } from '@/lib/auth/AccessControlGuard'
+import { logActivity, getUserInfo } from '@/lib/activity/ActivityLogger'
 
 /**
  * PATCH /api/survey/[id]/status
@@ -39,6 +40,10 @@ export async function PATCH(
     console.error('Failed to update survey status:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  getUserInfo(auth.userId).then(u =>
+    logActivity({ userId: auth.userId, userEmail: u.email, userName: u.name, action: 'survey_status_change', details: { surveyId: id, status } })
+  )
 
   return NextResponse.json({ survey: data })
 }

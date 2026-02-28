@@ -14,7 +14,7 @@ export const getCurrentProfile = cache(async (): Promise<UserProfile | null> => 
   const serviceClient = await createServiceClient()
   const { data } = await serviceClient
     .from('profiles')
-    .select('full_name, role, email')
+    .select('full_name, role, email, status')
     .eq('id', user.id)
     .single()
 
@@ -24,5 +24,6 @@ export const getCurrentProfile = cache(async (): Promise<UserProfile | null> => 
     full_name: data.full_name,
     email: data.email,
     role: data.role as UserProfile['role'],
+    status: data.status as 'pending' | 'approved' | 'rejected',
   }
 })

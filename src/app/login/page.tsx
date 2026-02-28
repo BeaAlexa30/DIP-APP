@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 export default function LoginPage() {
   const supabase = createClient()
@@ -15,6 +15,20 @@ export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [role, setRole] = useState<'admin' | 'analyst'>('analyst')
   const [showPassword, setShowPassword] = useState(false)
+  const [fullName, setFullName] = useState('')
+
+  // Show status-based messages from redirect (e.g. pending approval)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('status')
+    if (status === 'pending') {
+      setError('Your account is awaiting admin approval. You will receive an email once approved.')
+    } else if (status === 'rejected') {
+      setError('Your account access has been declined. Please contact an administrator.')
+    } else if (status === 'inactive') {
+      setError('Your account has been deactivated. Please contact an administrator.')
+    }
+  }, [])
 
   // Compute validation status without causing re-renders
   const currentPasswordValidation = useMemo(() => {
@@ -45,15 +59,30 @@ export default function LoginPage() {
     if (mode === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setError(error.message)
-      else router.push('/app')
+      else {
+        // Fire-and-forget activity log for login
+        fetch('/api/activity/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'login', details: { email } }),
+        }).catch(() => {}) // never block login
+        router.push('/app')
+      }
     } else {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { role } },
+      // Use server-side signup so the profile is created with pending status
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, role, fullName }),
       })
-      if (error) setError(error.message)
-      else setError('Check your email to confirm your account.')
+      const json = await res.json()
+      if (!res.ok) {
+        setError(json.error ?? 'Failed to create account.')
+      } else if (role === 'analyst') {
+        setError('Account created! Your account is pending admin approval. You will receive an email once approved.')
+      } else {
+        setError('Account created! Check your email to confirm your account.')
+      }
     }
 
     setLoading(false)
@@ -172,6 +201,19 @@ export default function LoginPage() {
 
           {mode === 'signup' && (
             <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Full Name</label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={e => setFullName(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Your full name"
+              />
+            </div>
+          )}
+
+          {mode === 'signup' && (
+            <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Role</label>
               <div className="grid grid-cols-2 gap-2">
                 {(['analyst', 'admin'] as const).map(r => (
@@ -192,7 +234,13 @@ export default function LoginPage() {
           )}
 
           {error && (
-            <div className={`text-xs px-3 py-2 rounded-lg border ${error.includes('Check') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+            <div className={`text-xs px-3 py-2 rounded-lg border ${
+              error.toLowerCase().includes('created') || error.toLowerCase().includes('approved') || error.toLowerCase().includes('awaiting')
+                ? 'bg-green-50 text-green-700 border-green-200'
+                : error.toLowerCase().includes('declined') || error.toLowerCase().includes('declined')
+                ? 'bg-orange-50 text-orange-700 border-orange-200'
+                : 'bg-red-50 text-red-600 border-red-200'
+            }`}>
               {error}
             </div>
           )}

@@ -3,6 +3,36 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export interface Database {
   public: {
     Tables: {
+      activity_logs: {
+        Row: {
+          id: string
+          user_id: string | null
+          user_email: string
+          user_name: string | null
+          action: string
+          details: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          user_email: string
+          user_name?: string | null
+          action: string
+          details?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          user_email?: string
+          user_name?: string | null
+          action?: string
+          details?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
       orgs: {
         Row: { id: string; name: string; created_at: string }
         Insert: { id?: string; name: string; created_at?: string }
@@ -16,6 +46,9 @@ export interface Database {
           email: string
           full_name: string | null
           role: 'admin' | 'analyst'
+          status: 'pending' | 'approved' | 'rejected'
+          is_active: boolean
+          password_change_required: boolean
           created_at: string
         }
         Insert: {
@@ -24,6 +57,9 @@ export interface Database {
           email: string
           full_name?: string | null
           role?: 'admin' | 'analyst'
+          status?: 'pending' | 'approved' | 'rejected'
+          is_active?: boolean
+          password_change_required?: boolean
           created_at?: string
         }
         Update: {
@@ -32,7 +68,37 @@ export interface Database {
           email?: string
           full_name?: string | null
           role?: 'admin' | 'analyst'
+          status?: 'pending' | 'approved' | 'rejected'
+          is_active?: boolean
+          password_change_required?: boolean
           created_at?: string
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          id: string
+          company_name: string
+          logo_url: string | null
+          primary_color: string
+          footer_tagline: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          company_name?: string
+          logo_url?: string | null
+          primary_color?: string
+          footer_tagline?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          company_name?: string
+          logo_url?: string | null
+          primary_color?: string
+          footer_tagline?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -235,6 +301,7 @@ export interface Database {
           pack_id: string
           pack_version_snapshot: Json
           status: 'draft' | 'published' | 'closed'
+          pre_archive_status: 'draft' | 'published' | 'closed' | null
           created_at: string
           updated_at: string
         }
@@ -244,6 +311,7 @@ export interface Database {
           pack_id: string
           pack_version_snapshot: Json
           status?: 'draft' | 'published' | 'closed'
+          pre_archive_status?: 'draft' | 'published' | 'closed' | null
           created_at?: string
           updated_at?: string
         }
@@ -253,6 +321,7 @@ export interface Database {
           pack_id?: string
           pack_version_snapshot?: Json
           status?: 'draft' | 'published' | 'closed'
+          pre_archive_status?: 'draft' | 'published' | 'closed' | null
           created_at?: string
           updated_at?: string
         }
@@ -370,7 +439,8 @@ export interface Database {
         Row: {
           id: string
           score_run_id: string
-          category_id: string
+          category_id: string | null
+          ai_category_name: string | null
           raw_score: number
           min_possible: number
           max_possible: number
@@ -380,7 +450,8 @@ export interface Database {
         Insert: {
           id?: string
           score_run_id: string
-          category_id: string
+          category_id?: string | null
+          ai_category_name?: string | null
           raw_score: number
           min_possible: number
           max_possible: number
@@ -390,7 +461,8 @@ export interface Database {
         Update: {
           id?: string
           score_run_id?: string
-          category_id?: string
+          category_id?: string | null
+          ai_category_name?: string | null
           raw_score?: number
           min_possible?: number
           max_possible?: number

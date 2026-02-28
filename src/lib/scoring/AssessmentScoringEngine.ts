@@ -34,7 +34,7 @@ export interface ScoringInput {
 }
 
 export interface CategoryScore {
-  categoryId: string
+  categoryId: string | null
   categoryName: string
   rawScore: number
   minPossible: number

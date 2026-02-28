@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import EditProjectModal from './ProjectEditDialog'
-import DeleteProjectButton from './ProjectRemovalControl'
+import ArchiveProjectButton from './ProjectRemovalControl'
 import { useCan } from './UserProfileProvider'
 import type { Database } from '@/types/DatabaseSchemaDefinitions'
 
@@ -10,14 +10,15 @@ type Project = Database['public']['Tables']['projects']['Row']
 
 interface Props {
   project: Project
+  surveyCount?: number
 }
 
-export default function ProjectActions({ project }: Props) {
+export default function ProjectActions({ project, surveyCount }: Props) {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const canEdit = useCan('editProject')
-  const canDelete = useCan('deleteProject')
+  const canArchive = useCan('deleteProject')  // deleteProject = Admin only
 
-  if (!canEdit && !canDelete) return null
+  if (!canEdit && !canArchive) return null
 
   return (
     <>
@@ -30,11 +31,12 @@ export default function ProjectActions({ project }: Props) {
             Edit Project
           </button>
         )}
-        {canDelete && (
-          <DeleteProjectButton 
-            projectId={project.id} 
+        {canArchive && (
+          <ArchiveProjectButton
+            projectId={project.id}
             projectName={project.client_name}
             currentStatus={project.status}
+            surveyCount={surveyCount}
           />
         )}
       </div>

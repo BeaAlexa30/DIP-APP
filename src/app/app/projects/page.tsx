@@ -53,7 +53,7 @@ export default async function ProjectsPage() {
         )}
       </div>
 
-      <ProjectsTable projects={projectsWithCounts} />
+      <ProjectsTable projects={projectsWithCounts} isAdmin={profile?.role === 'admin'} />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 const statusColors: Record<string, string> = {
@@ -47,10 +47,37 @@ const ALL_COLUMNS: Column[] = [
 
 interface Props {
   projects: Project[]
+  isAdmin?: boolean
 }
 
-export default function ProjectsTable({ projects }: Props) {
+export default function ProjectsTable({ projects, isAdmin }: Props) {
   const router = useRouter()
+
+  // Local rows state so we can remove deleted projects without a full page refresh
+  const [rows, setRows] = useState<Project[]>(projects)
+  useEffect(() => { setRows(projects) }, [projects])
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    setDeleteError(null)
+    const res = await fetch(`/api/projects/${deleteTarget.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setRows(prev => prev.filter(p => p.id !== deleteTarget.id))
+      setDeleteTarget(null)
+      setDeleteConfirmInput('')
+    } else {
+      const json = await res.json()
+      setDeleteError(json.error ?? 'Failed to delete project.')
+    }
+    setDeleteLoading(false)
+  }
 
   // Search
   const [search, setSearch] = useState('')
@@ -85,7 +112,7 @@ export default function ProjectsTable({ projects }: Props) {
 
   // Filter + search + sort
   const processed = useMemo(() => {
-    let result = [...projects]
+    let result = [...rows]
 
     // Search
     if (search.trim()) {
@@ -123,7 +150,7 @@ export default function ProjectsTable({ projects }: Props) {
     })
 
     return result
-  }, [projects, search, filterStatus, filterSurveyStatus, filterIndustry, sortKey, sortDir])
+  }, [rows, search, filterStatus, filterSurveyStatus, filterIndustry, sortKey, sortDir])
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -166,6 +193,66 @@ export default function ProjectsTable({ projects }: Props) {
 
   return (
     <>
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="bg-red-50 border-b border-red-200 px-6 py-4 flex items-start gap-3">
+              <span className="text-2xl mt-0.5">⚠️</span>
+              <div>
+                <h2 className="text-base font-bold text-red-700">Delete Project</h2>
+                <p className="text-xs text-red-500 mt-0.5">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-700">
+                You are about to permanently delete{' '}
+                <span className="font-semibold text-gray-900">{deleteTarget.client_name}</span>.
+                All surveys, responses, and score runs for this project will be deleted.
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Type the project name{' '}
+                  <span className="font-semibold text-gray-900">{deleteTarget.client_name}</span>{' '}to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmInput}
+                  onChange={e => setDeleteConfirmInput(e.target.value)}
+                  placeholder={deleteTarget.client_name}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  autoFocus
+                />
+              </div>
+              {deleteError && (
+                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {deleteError}
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+              <button
+                onClick={() => { setDeleteTarget(null); setDeleteConfirmInput(''); setDeleteError(null) }}
+                disabled={deleteLoading}
+                className="text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteLoading || deleteConfirmInput !== deleteTarget.client_name}
+                className="text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 px-4 py-2 rounded-lg transition-colors"
+              >
+                {deleteLoading ? 'Deleting…' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Print styles */}
       <style>{`
         @media print {
@@ -386,7 +473,7 @@ export default function ProjectsTable({ projects }: Props) {
           )}
 
           <span className="ml-auto text-xs text-gray-400">
-            {processed.length} of {projects.length} project{projects.length !== 1 ? 's' : ''}
+            {processed.length} of {rows.length} project{rows.length !== 1 ? 's' : ''}
           </span>
         </div>
       </div>
@@ -425,6 +512,9 @@ export default function ProjectsTable({ projects }: Props) {
                     </th>
                   )
                 })}
+                {isAdmin && (
+                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider no-print" />
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -441,7 +531,7 @@ export default function ProjectsTable({ projects }: Props) {
                     <td className="px-6 py-4 text-gray-500">{p.industry ?? '—'}</td>
                   )}
                   {visibleColumns.has('goal') && (
-                    <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{p.goal ?? '—'}</td>
+                    <td className="px-6 py-4 text-gray-500 max-w-xs whitespace-pre-wrap break-words">{p.goal ?? '—'}</td>
                   )}
                   {visibleColumns.has('status') && (
                     <td className="px-6 py-4">
@@ -469,6 +559,16 @@ export default function ProjectsTable({ projects }: Props) {
                   {visibleColumns.has('created_at') && (
                     <td className="px-6 py-4 text-gray-400 text-xs">
                       {new Date(p.created_at).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                    </td>
+                  )}
+                  {isAdmin && (
+                    <td className="px-6 py-4 no-print" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => { setDeleteTarget(p); setDeleteConfirmInput(''); setDeleteError(null) }}
+                        className="text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        Delete
+                      </button>
                     </td>
                   )}
                 </tr>

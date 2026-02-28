@@ -6,6 +6,11 @@ import { useRouter } from 'next/navigation'
 type SortKey = 'name' | 'version' | 'status' | 'created_at'
 type SortDir = 'asc' | 'desc'
 
+interface PackProject {
+  id: string
+  name: string
+}
+
 interface Pack {
   id: string
   name: string
@@ -13,6 +18,7 @@ interface Pack {
   description: string | null
   active: boolean
   created_at: string
+  projects?: PackProject[]
 }
 
 interface Column {
@@ -25,12 +31,17 @@ const ALL_COLUMNS: Column[] = [
   { key: 'version',     label: 'Version' },
   { key: 'description', label: 'Description' },
   { key: 'status',      label: 'Status' },
+  { key: 'projects',    label: 'Projects' },
   { key: 'created_at',  label: 'Created' },
 ]
 
 interface Props {
   packs: Pack[]
   canManage?: boolean
+}
+
+function ExpandableDescription({ text }: { text: string }) {
+  return <span className="whitespace-pre-wrap break-words">{text}</span>
 }
 
 export default function FrameworkPacksTable({ packs, canManage = false }: Props) {
@@ -41,6 +52,12 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
   )
   const [toggling, setToggling] = useState<Record<string, boolean>>({})
   const [toggleError, setToggleError] = useState<string | null>(null)
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<Pack | null>(null)
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [search, setSearch]               = useState('')
   const [filterStatus, setFilterStatus]   = useState('')
   const [sortKey, setSortKey]             = useState<SortKey>('created_at')
@@ -74,6 +91,28 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
       setToggleError(e.message)
     } finally {
       setToggling((prev) => ({ ...prev, [id]: false }))
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`/api/framework/${deleteTarget.id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok) {
+        setDeleteError(json.error ?? 'Failed to delete framework pack')
+        setDeleting(false)
+        return
+      }
+      setDeleteTarget(null)
+      setDeleteConfirmInput('')
+      setDeleting(false)
+      router.refresh()
+    } catch (e: any) {
+      setDeleteError(e.message)
+      setDeleting(false)
     }
   }
 
@@ -139,6 +178,84 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
 
   return (
     <>
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="bg-red-50 border-b border-red-200 px-6 py-4 flex items-start gap-3">
+              <span className="text-2xl mt-0.5">⚠️</span>
+              <div>
+                <h2 className="text-base font-bold text-red-700">Delete Framework Pack</h2>
+                <p className="text-xs text-red-500 mt-0.5">This action is permanent and cannot be undone.</p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-700">
+                You are about to delete <span className="font-semibold text-gray-900">{deleteTarget.name}</span>{' '}
+                <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">v{deleteTarget.version}</span>.
+              </p>
+
+              {(deleteTarget.projects ?? []).length > 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-800">
+                  <p className="font-semibold mb-1">⚠ This pack is used by {deleteTarget.projects!.length} project{deleteTarget.projects!.length > 1 ? 's' : ''}:</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {deleteTarget.projects!.map((p) => (
+                      <li key={p.id}>{p.name}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2">All linked surveys, responses, and score runs will be <strong>permanently deleted</strong>.</p>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-xs text-gray-600">
+                  This pack is not used by any projects yet.
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                  Type the pack name <span className="font-semibold text-gray-900">{deleteTarget.name}</span> to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmInput}
+                  onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                  placeholder={deleteTarget.name}
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  autoFocus
+                />
+              </div>
+
+              {deleteError && (
+                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {deleteError}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+              <button
+                onClick={() => { setDeleteTarget(null); setDeleteConfirmInput(''); setDeleteError(null) }}
+                disabled={deleting}
+                className="text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting || deleteConfirmInput !== deleteTarget.name}
+                className="text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 px-4 py-2 rounded-lg transition-colors"
+              >
+                {deleting ? 'Deleting…' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Print styles */}
       <style>{`
         @media print {
@@ -335,6 +452,9 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                     </th>
                   )
                 })}
+                {canManage && (
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider no-print">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -349,7 +469,11 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                     </td>
                   )}
                   {visibleColumns.has('description') && (
-                    <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{pack.description ?? '—'}</td>
+                    <td className="px-6 py-4 text-gray-500 max-w-md text-sm leading-relaxed">
+                      {pack.description ? (
+                        <ExpandableDescription text={pack.description} />
+                      ) : '—'}
+                    </td>
                   )}
                   {visibleColumns.has('status') && (
                     <td className="px-6 py-4">
@@ -375,9 +499,34 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                       )}
                     </td>
                   )}
+                  {visibleColumns.has('projects') && (
+                    <td className="px-6 py-4">
+                      {(pack.projects ?? []).length === 0 ? (
+                        <span className="text-xs text-gray-400 italic">None</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {(pack.projects ?? []).map((p) => (
+                            <span key={p.id} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                              {p.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   {visibleColumns.has('created_at') && (
                     <td className="px-6 py-4 text-gray-400 text-xs">
                       {new Date(pack.created_at).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                    </td>
+                  )}
+                  {canManage && (
+                    <td className="px-6 py-4 no-print">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(pack); setDeleteConfirmInput(''); setDeleteError(null) }}
+                        className="text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        Delete
+                      </button>
                     </td>
                   )}
                 </tr>

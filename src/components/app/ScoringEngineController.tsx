@@ -8,9 +8,11 @@ interface Props {
   surveyId: string
   frameworkVersion: string
   lastRunAt: string | null
+  responseCount?: number
+  previousResponseCount?: number
 }
 
-export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt }: Props) {
+export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt, responseCount, previousResponseCount }: Props) {
   const router = useRouter()
   const canRunScoring = useCan('runScoring')
   const [loading, setLoading] = useState(false)
@@ -48,6 +50,15 @@ export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt 
     router.refresh()
   }
 
+  // Disable recompute if no new responses since the last run
+  const hasNoNewResponses =
+    lastRunAt !== null &&
+    responseCount !== undefined &&
+    previousResponseCount !== undefined &&
+    responseCount === previousResponseCount
+
+  const isDisabled = loading || hasNoNewResponses
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="flex items-start justify-between mb-4">
@@ -74,6 +85,12 @@ export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt 
         </div>
       )}
 
+      {hasNoNewResponses && (
+        <div className="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+          No new responses since the last score run. Recompute is disabled until new responses are submitted.
+        </div>
+      )}
+
       <div className="text-xs text-gray-500 mb-4 space-y-1">
         <p>• Framework v{frameworkVersion}</p>
         <p>• Category scores normalized 0–100</p>
@@ -84,13 +101,14 @@ export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt 
 
       <button
         onClick={handleRun}
-        disabled={loading || !canRunScoring}
-        title={!canRunScoring ? 'Only Admins can run the scoring engine' : undefined}
+        disabled={isDisabled}
+        title={hasNoNewResponses ? 'No new responses since last run' : undefined}
         className="w-full bg-gray-900 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
       >
-        {!canRunScoring
-          ? '🔒 Scoring (Admin only)'
-          : loading ? 'Running Scoring Engine…' : lastRunAt ? 'Recompute Scores' : 'Run Scoring Engine'
+        {hasNoNewResponses ? 'No new responses — up to date'
+          : loading ? 'Running Scoring Engine…'
+          : lastRunAt ? 'Recompute Scores'
+          : 'Run Scoring Engine'
         }
       </button>
     </div>

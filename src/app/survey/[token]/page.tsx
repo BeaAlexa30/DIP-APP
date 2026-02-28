@@ -74,6 +74,7 @@ export default async function SurveyPage({ params }: { params: Promise<{ token: 
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const snapshot = survey.pack_version_snapshot as any
+  const isAiSurvey = snapshot?.ai_generated === true
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -81,6 +82,7 @@ export default async function SurveyPage({ params }: { params: Promise<{ token: 
         surveyId={survey.id}
         tokenId={tokenRecord.id}
         snapshot={snapshot}
+        isAiSurvey={isAiSurvey}
       />
     </div>
   )

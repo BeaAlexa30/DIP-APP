@@ -30,17 +30,14 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
   const loadShares = async () => {
     setLoadingShares(true)
     try {
-      console.log('Loading shares for project:', projectId)
-      const res = await fetch(`/api/reporting/manage-sharing?projectId=${projectId}`)
+      const res = await fetch(`/api/reporting/manage-sharing?projectId=${projectId}&scoreRunId=${scoreRunId}`)
       console.log('Load shares response status:', res.status)
       
       if (res.ok) {
         const data = await res.json()
-        console.log('Loaded shares:', data.shares)
         setShares(data.shares ?? [])
       } else {
         const errorData = await res.json()
-        console.error('Failed to load shares:', errorData)
         setError(`Failed to load links: ${errorData.error || 'Unknown error'}`)
       }
     } catch (err) {
@@ -208,10 +205,7 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
                 ) : (
                   <div className="space-y-3">
                     {shares
-                      .filter(s => {
-                        console.log('Share item:', s, 'isActive:', s.isActive)
-                        return s.isActive === true
-                      })
+                      .filter(s => s.isActive === true)
                       .map(share => (
                         <div key={share.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                           <div className="flex items-start justify-between gap-3 mb-2">

@@ -13,6 +13,7 @@ export interface UserProfile {
   full_name: string | null
   email: string
   role: UserRole
+  status?: 'pending' | 'approved' | 'rejected'
 }
 
 /** Central permission map */
@@ -21,15 +22,18 @@ const PERMISSIONS = {
   editProject:         ['admin'] as UserRole[],
   deleteProject:       ['admin'] as UserRole[],
   assignFramework:     ['admin'] as UserRole[],  // create/manage surveys
-  runScoring:          ['admin'] as UserRole[],
-  generateInsights:    ['admin'] as UserRole[],
+  runScoring:          ['admin', 'analyst'] as UserRole[],
+  generateInsights:    ['admin', 'analyst'] as UserRole[],
   viewDashboard:       ['admin', 'analyst'] as UserRole[],
   exportReport:        ['admin', 'analyst'] as UserRole[],
-  viewReports:         ['admin', 'analyst'] as UserRole[],  // view and share reports
+  viewReports:         ['admin', 'analyst'] as UserRole[],
   viewResponses:       ['admin', 'analyst'] as UserRole[],
   viewFrameworks:      ['admin', 'analyst'] as UserRole[],
   manageSurvey:        ['admin'] as UserRole[],  // manual survey close/reopen
   manageFramework:     ['admin'] as UserRole[],  // toggle framework pack active status
+  generateAiSurvey:    ['admin'] as UserRole[],  // generate AI-powered surveys via Groq
+  manageSettings:      ['admin'] as UserRole[],  // access settings & user approval
+  shareReport:         ['admin'] as UserRole[],  // generate shareable report links
 } as const
 
 export type Permission = keyof typeof PERMISSIONS

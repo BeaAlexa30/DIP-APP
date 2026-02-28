@@ -1,6 +1,6 @@
 
-import SurveyCard from '@/components/app/SurveyDisplayWidget'
-import AddSurveyButton from '@/components/app/SurveyCreationTrigger'
+import SurveyBulkManager from '@/components/app/SurveyBulkManager'
+import AddOrGenerateSurveyDialog from '@/components/app/AddOrGenerateSurveyDialog'
 import ProjectActions from '@/components/app/ProjectManagementControls'
 import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
 import type { Database } from '@/types/DatabaseSchemaDefinitions'
@@ -13,12 +13,18 @@ type ScoreRun = Pick<Database['public']['Tables']['score_runs']['Row'], 'id' | '
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
   const serviceClient = await createServiceClient()
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: profile } = user
+    ? await serviceClient.from('profiles').select('role').eq('id', user.id).single()
+    : { data: null }
+  const isAdmin = profile?.role === 'admin'
 
   const [projectRes, packsRes, surveysRes] = await Promise.all([
     serviceClient.from('projects').select('*').eq('id', id).single(),
-    supabase.from('framework_packs').select('id, name, version, description').eq('active', true),
+    serviceClient.from('framework_packs').select('id, name, version, description').eq('active', true),
     serviceClient
       .from('surveys')
       .select('*, survey_tokens(id, token, expires_at, max_responses, response_count)')
@@ -78,15 +84,31 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 Decision Dashboard
               </Link>
             )}
-            <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${project.status === 'active' ? 'bg-green-100 text-green-700' :
+            <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${
+              project.status === 'active' ? 'bg-green-100 text-green-700' :
               project.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                'bg-yellow-100 text-yellow-700'
-              }`}>
+              project.status === 'archived' ? 'bg-gray-200 text-gray-600' :
+              'bg-yellow-100 text-yellow-700'
+            }`}>
               {project.status}
             </span>
           </div>
         </div>
       </div>
+
+      {/* Archived banner */}
+      {project.status === 'archived' && (
+        <div className="bg-gray-100 border border-gray-300 rounded-xl px-6 py-4 mb-6 flex items-start gap-3">
+          <span className="text-2xl mt-0.5">🗄</span>
+          <div>
+            <p className="text-sm font-semibold text-gray-700">This project is archived</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              All surveys are closed and no longer accepting responses. No new surveys can be created.
+              An Admin can reopen the project to restore survey access.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Content Container */}
       <div className="max-w-7xl mx-auto px-6">
@@ -143,7 +165,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             
             {/* Project Actions */}
             <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
-              <ProjectActions project={project} />
+              <ProjectActions project={project} surveyCount={surveys.length} />
             </div>
           </div>
         </div>
@@ -158,44 +180,65 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           {/* Survey Cards */}
           {surveysWithData.length > 0 ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {surveysWithData.map(({ survey, responseCount, latestScoreRun }) => (
-                  <SurveyCard
-                    key={survey.id}
-                    survey={survey as any}
-                    projectId={project.id}
-                    responseCount={responseCount}
-                    latestScoreRun={latestScoreRun}
-                  />
-                ))}
-              </div>
+              <SurveyBulkManager
+                surveysWithData={surveysWithData as any}
+                projectId={project.id}
+                projectArchived={project.status === 'archived'}
+              />
 
-              {/* Add Another Survey Button */}
-              <div className="mt-4">
-                <AddSurveyButton
-                  projectId={project.id}
-                  packs={packs}
-                  existingPackIds={surveys.map(s => s.pack_id)}
-                />
-              </div>
+              {/* Add / Generate AI Survey — admin only, hidden when project is archived */}
+              {isAdmin && project.status !== 'archived' && (
+                <div className="mt-4">
+                  <AddOrGenerateSurveyDialog
+                    projectId={project.id}
+                    projectName={project.client_name}
+                    projectContext={{
+                      industry: project.industry ?? null,
+                      goal: project.goal ?? null,
+                      stage: project.stage ?? null,
+                      channels: project.channels ?? null,
+                      target_audience: project.target_audience ?? null,
+                    }}
+                    packs={packs}
+                    existingPackIds={surveys.map(s => s.pack_id)}
+                  />
+                </div>
+              )}
             </>
           ) : (
-            /* No surveys yet - show initial framework selector */
+            /* No surveys yet — hide selector when archived */
+            project.status !== 'archived' ? (
             <div className="bg-white rounded-xl border border-gray-200 p-8">
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-3xl">📋</span>
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">No Surveys Yet</h3>
-                <p className="text-sm text-gray-500">Create your first framework survey to start collecting responses</p>
+                <p className="text-sm text-gray-500">{isAdmin ? 'Choose a method below to create your first survey' : 'No surveys have been created for this project yet.'}</p>
               </div>
 
-              <AddSurveyButton
-                projectId={project.id}
-                packs={packs}
-                existingPackIds={[]}
-              />
+              {isAdmin && (
+                <AddOrGenerateSurveyDialog
+                  projectId={project.id}
+                  projectName={project.client_name}
+                  projectContext={{
+                    industry: project.industry ?? null,
+                    goal: project.goal ?? null,
+                    stage: project.stage ?? null,
+                    channels: project.channels ?? null,
+                    target_audience: project.target_audience ?? null,
+                  }}
+                  packs={packs}
+                  existingPackIds={[]}
+                />
+              )}
             </div>
+            ) : (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+                <span className="text-3xl block mb-2">🗄</span>
+                <p className="text-sm text-gray-500">No surveys were created before this project was archived.</p>
+              </div>
+            )
           )}
         </div>
       </div>

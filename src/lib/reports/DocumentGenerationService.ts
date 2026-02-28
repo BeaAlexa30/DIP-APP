@@ -23,6 +23,8 @@ export interface ReportData {
   scoring: ScoringResult
   aiInsightSummary?: string   // Optional, clearly labeled as AI
   aiThemes?: string[]         // Optional AI themes
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fullAnalysis?: Record<string, any>  // 5-dimensional AI analysis
 }
 
 export function generatePDFReport(data: ReportData): Blob {

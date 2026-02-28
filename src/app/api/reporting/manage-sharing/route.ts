@@ -2,13 +2,14 @@ import { NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
 import { requirePermission } from '@/lib/auth/AccessControlGuard'
 import { randomBytes } from 'crypto'
+import { logActivity, getUserInfo } from '@/lib/activity/ActivityLogger'
 
 /**
  * POST /api/reports/share
  * Generate a shareable report link
  */
 export async function POST(req: NextRequest) {
-  const authResult = await requirePermission('viewReports')
+  const authResult = await requirePermission('shareReport')
   if (!authResult.ok) return authResult.response
   
   const body = await req.json()
@@ -69,6 +70,10 @@ export async function POST(req: NextRequest) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
   const shareUrl = `${baseUrl}/share/report/${token}`
 
+  getUserInfo(authResult.userId).then(u =>
+    logActivity({ userId: authResult.userId, userEmail: u.email, userName: u.name, action: 'share_report', details: { projectId, scoreRunId, shareUrl } })
+  )
+
   return Response.json({
     success: true,
     share: {
@@ -90,6 +95,7 @@ export async function GET(req: NextRequest) {
   
   const searchParams = req.nextUrl.searchParams
   const projectId = searchParams.get('projectId')
+  const scoreRunId = searchParams.get('scoreRunId')
 
   if (!projectId) {
     return Response.json({ error: 'Missing projectId' }, { status: 400 })
@@ -97,11 +103,16 @@ export async function GET(req: NextRequest) {
 
   const serviceClient = await createServiceClient()
 
-  const { data: shares, error } = await serviceClient
+  let query = serviceClient
     .from('report_shares')
     .select('*, score_runs(executed_at, response_count)')
     .eq('project_id', projectId)
-    .order('created_at', { ascending: false })
+
+  if (scoreRunId) {
+    query = query.eq('score_run_id', scoreRunId)
+  }
+
+  const { data: shares, error } = await query.order('created_at', { ascending: false })
 
   if (error) {
     console.error('Failed to fetch report shares:', error)
@@ -127,7 +138,8 @@ export async function GET(req: NextRequest) {
  * Deactivate a shareable link
  */
 export async function DELETE(req: NextRequest) {
-  await requirePermission('viewReports')
+  const deleteAuth = await requirePermission('shareReport')
+  if (!deleteAuth.ok) return deleteAuth.response
   
   const searchParams = req.nextUrl.searchParams
   const id = searchParams.get('id')
@@ -147,6 +159,10 @@ export async function DELETE(req: NextRequest) {
     console.error('Failed to deactivate report share:', error)
     return Response.json({ error: 'Failed to deactivate link' }, { status: 500 })
   }
+
+  getUserInfo(deleteAuth.userId).then(u =>
+    logActivity({ userId: deleteAuth.userId, userEmail: u.email, userName: u.name, action: 'deactivate_share', details: { shareId: id } })
+  )
 
   return Response.json({ success: true })
 }

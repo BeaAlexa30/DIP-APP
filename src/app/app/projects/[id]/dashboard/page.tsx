@@ -6,7 +6,7 @@ import Link from 'next/link'
 import IndexScoreCard from '@/components/dashboard/MetricsOverviewCard'
 import IssueRankingTable from '@/components/dashboard/PriorityIssuesDisplay'
 import CategoryChart from '@/components/dashboard/AnalyticsCategoryVisualizer'
-import GenerateInsightsButton from '@/components/dashboard/AIInsightGenerator'
+import AIInsightsPanel from '@/components/dashboard/AIInsightsPanel'
 import ScoreRunHistory from '@/components/dashboard/ExecutionHistoryTracker'
 import DateRangeFilter from '@/components/dashboard/TimeperiodSelector'
 import FrameworkSelector from '@/components/dashboard/AssessmentFrameworkPicker'
@@ -22,6 +22,7 @@ export const metadata: Metadata = {
 }
 
 type ScoreResultWithCategory = Database['public']['Tables']['score_results']['Row'] & {
+  ai_category_name: string | null
   framework_categories: { name: string } | null
 }
 
@@ -273,11 +274,14 @@ export default async function ProjectDashboard({
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-700">Category Breakdown</h2>
+            {(categoryResults ?? []).some(r => r.ai_category_name !== null) && (
+              <p className="text-xs text-gray-400 mt-0.5">Categories determined by AI based on survey focus &amp; project context</p>
+            )}
           </div>
           <div className="p-4 md:p-6">
             <CategoryChart
               categories={(categoryResults ?? []).map(r => ({
-                name: r.framework_categories?.name ?? r.category_id,
+                name: r.ai_category_name ?? r.framework_categories?.name ?? r.category_id ?? '',
                 score: r.normalized_score,
               }))}
             />
@@ -286,44 +290,37 @@ export default async function ProjectDashboard({
       </div>
 
       {/* AI Insights — clearly labeled non-scoring */}
-      {aiInsights ? (
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-purple-600 font-semibold text-sm">
-                {(aiInsights.model_metadata as { model?: string })?.model === 'deterministic-fallback' ? 'Rule-Based Summary' : 'AI Summary'}
-              </span>
-              <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium">Non-Scoring</span>
-              {(aiInsights.model_metadata as { model?: string })?.model === 'deterministic-fallback' && (
-                <span className="text-xs bg-amber-100 text-amber-700 border border-amber-300 px-2 py-0.5 rounded-full font-medium">
-                  ⚠ AI quota exhausted — auto-generated from scores
-                </span>
-              )}
-            </div>
-            <GenerateInsightsButton scoreRunId={scoreRunId} />
-          </div>
-          <p className="text-sm text-gray-700 leading-relaxed mb-4">{aiInsights.summary_text}</p>
-          {aiInsights.themes_json && Array.isArray(aiInsights.themes_json) && (
+      {aiInsights ? (() => {
+        const meta = aiInsights.model_metadata as any
+        const full = meta?.fullAnalysis
+        const isFallback = meta?.isFallback === true || meta?.model === 'deterministic-fallback'
+        const tabs = [
+          { key: 'descriptive',  label: 'What happened?',     icon: '📊' },
+          { key: 'diagnostic',   label: 'Why?',               icon: '🔍' },
+          { key: 'predictive',   label: 'What might happen?', icon: '🔮' },
+          { key: 'prescriptive', label: 'What to do?',        icon: '🎯' },
+          { key: 'kpi',          label: 'KPI View',            icon: '📈' },
+        ]
+        return (
+          <AIInsightsPanel
+            aiInsights={aiInsights}
+            full={full}
+            isFallback={isFallback}
+            tabs={tabs}
+            scoreRunId={scoreRunId}
+          />
+        )
+      })() : (
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-6 mb-6">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">⚡</span>
             <div>
-              <p className="text-xs font-medium text-purple-600 mb-2">Key Themes</p>
-              <div className="flex flex-wrap gap-2">
-                {(aiInsights.themes_json as string[]).map((theme, i) => (
-                  <span key={i} className="text-xs bg-white border border-purple-200 text-purple-700 px-3 py-1 rounded-full">
-                    {theme}
-                  </span>
-                ))}
-              </div>
+              <p className="text-sm font-semibold text-violet-700">No AI Insights yet</p>
+              <p className="text-xs text-violet-500 mt-0.5">
+                AI insights are generated automatically when you run the Scoring Engine on the project page.
+                Return to the project and click <strong>Recompute Scores</strong> on any survey to generate insights.
+              </p>
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-purple-700">AI Summary</p>
-              <p className="text-xs text-purple-500 mt-0.5">No insights generated yet for this score run.</p>
-            </div>
-            <GenerateInsightsButton scoreRunId={scoreRunId} />
           </div>
         </div>
       )}

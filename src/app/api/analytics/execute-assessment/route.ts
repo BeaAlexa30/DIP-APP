@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { runScoringPipeline } from '@/lib/scoring/AssessmentScoringEngine'
+import { runAIScoringPipeline } from '@/lib/scoring/AIAssessmentScoringEngine'
 import { requirePermission } from '@/lib/auth/AccessControlGuard'
 
 export async function POST(req: NextRequest) {
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runScoringPipeline({ surveyId, frameworkVersion })
+    const result = await runAIScoringPipeline({ surveyId, frameworkVersion })
 
     // Auto-generate AI insights after successful scoring
     try {

@@ -24,9 +24,38 @@ export async function requirePermission(permission: Permission): Promise<
   const serviceClient = await createServiceClient()
   const { data: profile } = await serviceClient
     .from('profiles')
-    .select('role')
+    .select('role, status, is_active')
     .eq('id', user.id)
     .single()
+
+  // Block pending / rejected accounts
+  if (profile?.status === 'pending') {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Your account is pending admin approval.' },
+        { status: 403 }
+      ),
+    }
+  }
+  if (profile?.status === 'rejected') {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Your account access has been declined.' },
+        { status: 403 }
+      ),
+    }
+  }
+  if (profile?.is_active === false) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'Your account has been deactivated. Contact an administrator.' },
+        { status: 403 }
+      ),
+    }
+  }
 
   const role = (profile?.role ?? 'analyst') as UserRole
 

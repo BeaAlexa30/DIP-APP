@@ -17,6 +17,8 @@ export default async function AppDashboard() {
     { data: allSurveyStatuses },
     { count: frameworkCount },
     { data: allProjectDates },
+    { count: totalResponses },
+    { data: healthScores },
   ] = await Promise.all([
     supabase
       .from('projects')
@@ -27,6 +29,8 @@ export default async function AppDashboard() {
     supabase.from('surveys').select('status'),
     supabase.from('framework_packs').select('id', { count: 'exact', head: true }).eq('active', true),
     supabase.from('projects').select('created_at'),
+    supabase.from('responses').select('id', { count: 'exact', head: true }),
+    supabase.from('executive_results').select('health_score_0_100').order('created_at', { ascending: false }).limit(20),
   ])
 
   // ── Status groupings ──────────────────────────────────────
@@ -77,6 +81,13 @@ export default async function AppDashboard() {
   })
 
   // ── Gemini insight payload ────────────────────────────────
+  const avgHealthScore = healthScores && healthScores.length > 0
+    ? healthScores.reduce((sum, r) => sum + (r.health_score_0_100 ?? 0), 0) / healthScores.length
+    : undefined
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const recentResponsesCount = undefined // Approximation — full count would need extra query
+
   const insightPayload = {
     totalProjects,
     activeProjects: statusGroup['active'] ?? 0,
@@ -86,6 +97,9 @@ export default async function AppDashboard() {
     activeSurveys,
     totalSurveys,
     frameworkPacks: frameworkCount ?? 0,
+    totalResponses: totalResponses ?? 0,
+    avgHealthScore,
+    recentResponsesCount,
   }
 
   return (
