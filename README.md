@@ -1,6 +1,6 @@
-# Decision Intelligence Platform (DIP) — MVP
+# Decision Intelligence Platform (DIP)
 
-A full-stack platform for CX decision intelligence. Clients complete structured surveys, responses are scored through a deterministic engine, and results are presented as indexes, dashboards, and exportable PDF reports.
+A full-stack platform for CX decision intelligence. Clients complete structured surveys, responses are scored through a deterministic engine, and results are presented as indexes, dashboards, and exportable PDF reports. The platform includes an admin panel for user management, branding customization, activity logging, and notification management.
 
 ---
 
@@ -12,12 +12,10 @@ A full-stack platform for CX decision intelligence. Clients complete structured 
 4. [Supabase Setup & Migrations](#supabase-setup--migrations)
 5. [Running Locally](#running-locally)
 6. [Running Unit Tests](#running-unit-tests)
-7. [Seeding the Framework](#seeding-the-framework)
-8. [Project Structure](#project-structure)
-9. [Scoring Engine](#scoring-engine)
-10. [AI Insights Contract](#ai-insights-contract)
-11. [Sprint / Team Tasks](#sprint--team-tasks)
-12. [Deployment Checklist](#deployment-checklist)
+7. [Project Structure](#project-structure)
+8. [Scoring Engine](#scoring-engine)
+9. [AI Insights Contract](#ai-insights-contract)
+10. [Deployment Checklist](#deployment-checklist)
 
 ---
 
@@ -26,25 +24,47 @@ A full-stack platform for CX decision intelligence. Clients complete structured 
 ```
 Browser (Next.js App Router)
     │
-    ├── /login               — Auth (Supabase Auth)
-    ├── /app/**              — Protected internal app (requires auth)
-    │       ├── /app                   Dashboard
-    │       ├── /app/projects          Projects list & intake
-    │       ├── /app/projects/[id]     Project detail + survey management
-    │       ├── /app/projects/[id]/dashboard   Scoring dashboard
-    │       └── /app/frameworks        Framework pack browser
+    ├── /login                         — Auth (Supabase Auth)
+    ├── /app/**                        — Protected internal app (requires auth)
+    │       ├── /app                              Dashboard
+    │       ├── /app/projects                     Projects list & intake
+    │       ├── /app/projects/new                 New project form
+    │       ├── /app/projects/[id]                Project detail + survey management
+    │       ├── /app/projects/[id]/dashboard      Scoring dashboard
+    │       ├── /app/projects/[id]/responses      Response viewer
+    │       ├── /app/frameworks                   Framework pack browser
+    │       └── /app/settings                     Admin settings panel
     │
-    ├── /survey/[token]      — Public respondent survey (anon)
-    └── /reports/[projectId] — Report preview + PDF export
+    ├── /survey/[token]                — Public respondent survey (anon)
+    ├── /reports/[projectId]           — Report preview + PDF export
+    └── /share/report                  — Shareable public report link
 
 API Routes (Next.js Route Handlers)
-    ├── POST /api/scoring/run          — Trigger deterministic scoring pipeline
-    ├── POST /api/framework/snapshot   — Create versioned framework snapshot
-    └── POST /api/insights/generate    — Generate AI-only text insights
+    ├── /api/scoring/run                        — Trigger deterministic scoring pipeline
+    ├── /api/assessment-frameworks/capture-version — Create versioned framework snapshot
+    ├── /api/insights/generate                  — Generate AI text insights
+    ├── /api/insights/dashboard                 — Fetch dashboard insights
+    ├── /api/intelligence/create-analysis       — AI intelligence analysis
+    ├── /api/analytics/execute-assessment       — Execute assessment analytics
+    ├── /api/assessments/*                      — Assessment CRUD + token + submission
+    ├── /api/survey/*                           — Survey management + AI generation
+    ├── /api/projects/[id]                      — Project CRUD
+    ├── /api/reporting/manage-sharing           — Report sharing management
+    ├── /api/reports/share                      — Shared report access
+    ├── /api/auth/signup                        — User registration
+    ├── /api/auth/change-password               — Password change
+    ├── /api/admin/users                        — Admin: user management
+    ├── /api/admin/activity                     — Admin: activity log viewer
+    ├── /api/admin/notifications                — Admin: notification management
+    ├── /api/admin/download/project             — Admin: project data export
+    ├── /api/admin/download/migrations          — Admin: migration file download
+    ├── /api/activity/log                       — Activity logging
+    ├── /api/settings/branding                  — Branding configuration
+    └── /api/workspaces/[id]                    — Workspace management
 
 Supabase (Postgres + Auth + Row Level Security)
-    ├── 18 tables with full RLS
-    ├── 4 migration files (run in order)
+    ├── Full RLS on all tables
+    ├── 11 migration files (run in order)
     └── Helper functions & dashboard views
 ```
 
@@ -64,15 +84,20 @@ Supabase (Postgres + Auth + Row Level Security)
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS |
+| Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Framer Motion |
 | Backend | Next.js API Routes (Route Handlers) |
 | Database | Supabase (PostgreSQL) with Row Level Security |
 | Auth | Supabase Auth (`@supabase/ssr`) |
 | Charts | Recharts (RadarChart, BarChart) |
 | PDF Export | jsPDF + jspdf-autotable |
 | AI Insights | Google Gemini `gemini-2.0-flash` (summaries only) |
+| AI (Groq) | Groq SDK — alternative AI provider |
+| State Management | Zustand |
+| Validation | Zod |
+| Email | Nodemailer + Resend |
+| Archiving | Archiver (project data export) |
 | Unit Tests | Jest + ts-jest |
-| Checksums | Node.js `crypto` SHA-256 |
+| Checksums | `crypto-js` SHA-256 |
 
 ---
 
@@ -90,6 +115,9 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Gemini — for AI insights generation only
 GEMINI_API_KEY=your_gemini_api_key
+
+# Groq — alternative AI provider (optional)
+GROQ_API_KEY=your_groq_api_key
 ```
 
 > **Important:** `SUPABASE_SERVICE_ROLE_KEY` is used by the scoring engine API route to bypass RLS when writing results. Never use it in client-side code.
@@ -102,18 +130,25 @@ GEMINI_API_KEY=your_gemini_api_key
 - A Supabase project (free tier works for MVP)
 - Supabase CLI installed: `npm install -g supabase`
 
+### Migration Files (run in order)
+
+```
+supabase/migrations/001_initial_schema.sql       ← Must run first (creates all tables)
+supabase/migrations/002_rls_policies.sql         ← Row Level Security policies
+supabase/migrations/003_helper_functions.sql     ← Helper functions + dashboard views
+supabase/migrations/004_report_shares.sql        ← Shareable report links
+supabase/migrations/005_ai_category_scores.sql   ← AI category scoring tables
+supabase/migrations/006_archive_project.sql      ← Project archiving support
+supabase/migrations/007_delete_seeded_frameworks.sql ← Cleanup seeded frameworks
+supabase/migrations/011_settings_and_approval.sql    ← App settings + user approval
+supabase/migrations/012_password_change_required.sql ← Force password change flag
+supabase/migrations/013_user_active_status.sql   ← User active/inactive status
+supabase/migrations/014_activity_logs.sql        ← Activity logging table
+```
+
 ### Option A: Supabase Dashboard (recommended for quick start)
 
-Run each SQL file in order via **Supabase Dashboard > SQL Editor**:
-
-```
-supabase/migrations/001_initial_schema.sql    ← Must run first (creates all tables)
-supabase/migrations/002_rls_policies.sql      ← Must run second (adds RLS)
-supabase/migrations/003_seed_framework_v1.sql ← Seed CX framework pack (original)
-supabase/migrations/004_helper_functions.sql  ← Helper functions + views
-supabase/migrations/005_report_shares.sql     ← Shareable report links feature
-supabase/migrations/006_additional_frameworks.sql ← 5 new professional frameworks
-```
+Run each SQL file in order via **Supabase Dashboard > SQL Editor**.
 
 ### Option B: Supabase CLI
 
@@ -128,10 +163,15 @@ supabase db push
 ```bash
 psql "$DATABASE_URL" -f supabase/migrations/001_initial_schema.sql
 psql "$DATABASE_URL" -f supabase/migrations/002_rls_policies.sql
-psql "$DATABASE_URL" -f supabase/migrations/003_seed_framework_v1.sql
-psql "$DATABASE_URL" -f supabase/migrations/004_helper_functions.sql
-psql "$DATABASE_URL" -f supabase/migrations/005_report_shares.sql
-psql "$DATABASE_URL" -f supabase/migrations/006_additional_frameworks.sql
+psql "$DATABASE_URL" -f supabase/migrations/003_helper_functions.sql
+psql "$DATABASE_URL" -f supabase/migrations/004_report_shares.sql
+psql "$DATABASE_URL" -f supabase/migrations/005_ai_category_scores.sql
+psql "$DATABASE_URL" -f supabase/migrations/006_archive_project.sql
+psql "$DATABASE_URL" -f supabase/migrations/007_delete_seeded_frameworks.sql
+psql "$DATABASE_URL" -f supabase/migrations/011_settings_and_approval.sql
+psql "$DATABASE_URL" -f supabase/migrations/012_password_change_required.sql
+psql "$DATABASE_URL" -f supabase/migrations/013_user_active_status.sql
+psql "$DATABASE_URL" -f supabase/migrations/014_activity_logs.sql
 ```
 
 ### Enable Row Level Security
@@ -159,15 +199,15 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 - You will be redirected to `/login`
-- Sign up to create the first user account
+- Sign up to create the first user account (admin approval may be required)
 - After login, you are redirected to `/app` (dashboard)
 
 ### First-time Setup Checklist
 
-- [ ] Migrations 001–004 have been run in Supabase
-- [ ] `.env.local` has valid Supabase URL + anon key + service role key
+- [ ] All 11 migrations have been run in Supabase
+- [ ] `.env.local` has valid Supabase URL + anon key + service role key + Gemini API key
 - [ ] At least one admin user account created via `/login`
-- [ ] Framework Pack visible in `/app/frameworks` (seeded by migration 003)
+- [ ] Framework packs added via SQL or admin import
 
 ---
 
@@ -181,53 +221,15 @@ npm test
 npm run test:watch
 ```
 
-Current test suite: **27 tests, all passing** in `src/lib/scoring/__tests__/engine.test.ts`
+Test suite located at `src/lib/scoring/__tests__/AssessmentScoringEngine.test.ts`
 
-| Suite | Tests | Coverage |
-|---|---|---|
-| `normalizeScore()` | 7 | Score normalization, edge cases (0/100/clamped) |
-| `computePriorityScore()` | 7 | Priority formula, all-zero, decimal weights |
-| `computeWeightedIndex()` | 5 | Weighted average, missing components, fallback |
-| `computeHealthScore()` | 5 | Health formula, risk penalty, boundary values |
-| `computeChecksum()` | 4 | SHA-256 determinism, ID ordering, versioning |
-
----
-
-## Seeding the Framework
-
-Migration `003_seed_framework_v1.sql` seeds the original MVP framework:
-
-**Framework Pack:** "Customer Experience Decision Intelligence" (v1.0)
-
-Migration `006_additional_frameworks.sql` adds 5 professional frameworks:
-
-1. **Employee Experience & Engagement** - HR & organizational health
-2. **SaaS Product Adoption & Retention** - B2B SaaS customer health
-3. **E-commerce Conversion Optimization** - Online retail optimization
-4. **Mobile App User Experience** - Mobile app performance & engagement
-5. **B2B Sales Process Experience** - Enterprise sales journey mapping
-
-See [FRAMEWORK_GUIDE.md](./FRAMEWORK_GUIDE.md) for complete framework documentation.
-
-**Original Framework Details:**
-
-| # | Category | Weight | Questions |
-|---|---|---|---|
-| 1 | Trust & Security Perception | 20% | 4 |
-| 2 | Usability & Navigation | 25% | 5 |
-| 3 | Conversion & Decision Friction | 25% | 5 |
-| 4 | Overall Experience Quality | 20% | 4 |
-| 5 | Loyalty & Advocacy Potential | 10% | 3 |
-
-**Total:** 21 questions, 4–5 options each, all options have scoring rules (score_delta 0–10, risk_flag, friction_flag, driver_tag).
-
-### Adding New Framework Packs
-
-Framework packs are currently added via SQL only (no admin UI). To add a new pack:
-
-1. Create a new `.sql` file in `supabase/migrations/` following the pattern of `003_seed_framework_v1.sql`
-2. Insert into: `framework_packs` → `framework_categories` → `framework_questions` → `framework_options` → `framework_scoring_rules`
-3. Run the migration against your Supabase project
+| Suite | Coverage |
+|---|---|
+| `normalizeScore()` | Score normalization, edge cases (0/100/clamped) |
+| `computePriorityScore()` | Priority formula, all-zero, decimal weights |
+| `computeWeightedIndex()` | Weighted average, missing components, fallback |
+| `computeHealthScore()` | Health formula, risk penalty, boundary values |
+| `computeChecksum()` | SHA-256 determinism, ID ordering, versioning |
 
 ---
 
@@ -237,71 +239,152 @@ Framework packs are currently added via SQL only (no admin UI). To add a new pac
 dip-app/
 ├── supabase/
 │   └── migrations/
-│       ├── 001_initial_schema.sql     # All 18 tables, triggers, indexes
-│       ├── 002_rls_policies.sql       # Row Level Security for all tables
-│       ├── 003_seed_framework_v1.sql  # CX Framework Pack v1.0 seed
-│       └── 004_helper_functions.sql   # SQL functions + dashboard views
+│       ├── 001_initial_schema.sql          # All tables, triggers, indexes
+│       ├── 002_rls_policies.sql            # Row Level Security for all tables
+│       ├── 003_helper_functions.sql        # SQL functions + dashboard views
+│       ├── 004_report_shares.sql           # Shareable report links
+│       ├── 005_ai_category_scores.sql      # AI category scoring tables
+│       ├── 006_archive_project.sql         # Project archiving
+│       ├── 007_delete_seeded_frameworks.sql
+│       ├── 011_settings_and_approval.sql   # App settings + user approval flow
+│       ├── 012_password_change_required.sql
+│       ├── 013_user_active_status.sql
+│       └── 014_activity_logs.sql
 │
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── scoring/run/route.ts         # POST: run scoring pipeline
-│   │   │   ├── framework/snapshot/route.ts  # POST: create framework snapshot
-│   │   │   └── insights/generate/route.ts   # POST: generate AI insights
+│   │   │   ├── activity/log/route.ts                   # Log activity events
+│   │   │   ├── admin/
+│   │   │   │   ├── users/route.ts                      # List/manage users
+│   │   │   │   ├── users/[id]/route.ts                 # User detail + status
+│   │   │   │   ├── activity/route.ts                   # Activity log viewer
+│   │   │   │   ├── notifications/route.ts              # Notification management
+│   │   │   │   ├── download/project/route.ts           # Export project data
+│   │   │   │   └── download/migrations/route.ts        # Download migrations
+│   │   │   ├── analytics/execute-assessment/route.ts   # Run assessment analytics
+│   │   │   ├── assessment-frameworks/capture-version/route.ts
+│   │   │   ├── assessments/
+│   │   │   │   ├── [id]/state-management/route.ts
+│   │   │   │   ├── create-access-token/route.ts
+│   │   │   │   ├── reload-framework-data/route.ts
+│   │   │   │   ├── submit-ai-response/route.ts
+│   │   │   │   ├── submit-response/route.ts
+│   │   │   │   └── update-response-count/route.ts
+│   │   │   ├── auth/
+│   │   │   │   ├── signup/route.ts                     # User registration
+│   │   │   │   └── change-password/route.ts
+│   │   │   ├── framework/[id]/route.ts
+│   │   │   ├── framework/snapshot/route.ts
+│   │   │   ├── insights/generate/route.ts              # AI text insights
+│   │   │   ├── insights/dashboard/route.ts
+│   │   │   ├── intelligence/create-analysis/route.ts
+│   │   │   ├── projects/[id]/route.ts
+│   │   │   ├── reporting/manage-sharing/route.ts
+│   │   │   ├── reports/share/route.ts
+│   │   │   ├── scoring/run/route.ts                    # Deterministic scoring pipeline
+│   │   │   ├── settings/branding/route.ts
+│   │   │   ├── survey/
+│   │   │   │   ├── [id]/status/route.ts
+│   │   │   │   ├── generate-ai/route.ts
+│   │   │   │   ├── generate-token/route.ts
+│   │   │   │   ├── increment-count/route.ts
+│   │   │   │   ├── recommend-frameworks/route.ts
+│   │   │   │   ├── refresh-snapshot/route.ts
+│   │   │   │   └── submit/route.ts
+│   │   │   └── workspaces/[id]/route.ts
 │   │   ├── app/
-│   │   │   ├── layout.tsx                   # Protected layout + sidebar
-│   │   │   ├── page.tsx                     # Dashboard landing
+│   │   │   ├── layout.tsx                              # Protected layout + sidebar
+│   │   │   ├── page.tsx                                # Dashboard landing
 │   │   │   ├── projects/
-│   │   │   │   ├── page.tsx                 # Projects list
-│   │   │   │   ├── new/page.tsx             # Client intake form
+│   │   │   │   ├── page.tsx                            # Projects list
+│   │   │   │   ├── new/page.tsx                        # Client intake form
 │   │   │   │   └── [id]/
-│   │   │   │       ├── page.tsx             # Project detail
-│   │   │   │       └── dashboard/page.tsx   # Scoring dashboard
-│   │   │   └── frameworks/page.tsx          # Framework browser
-│   │   ├── login/page.tsx                   # Auth page
-│   │   ├── survey/[token]/page.tsx          # Survey entry (public)
-│   │   ├── reports/[projectId]/page.tsx     # Report preview + export
-│   │   ├── layout.tsx                       # Root layout
-│   │   └── page.tsx                         # Root redirect
+│   │   │   │       ├── page.tsx                        # Project detail
+│   │   │   │       ├── dashboard/page.tsx              # Scoring dashboard
+│   │   │   │       └── responses/page.tsx              # Response viewer
+│   │   │   ├── frameworks/page.tsx                     # Framework browser
+│   │   │   └── settings/page.tsx                       # Admin settings
+│   │   ├── login/page.tsx                              # Auth page
+│   │   ├── survey/[token]/page.tsx                     # Survey entry (public)
+│   │   ├── reports/[projectId]/page.tsx                # Report preview + export
+│   │   ├── share/report/                               # Public shared report
+│   │   ├── layout.tsx
+│   │   └── page.tsx                                    # Root redirect
 │   │
 │   ├── components/
 │   │   ├── app/
-│   │   │   ├── Sidebar.tsx                  # Navigation sidebar
-│   │   │   ├── SurveyManager.tsx            # Survey creation + link sharing
-│   │   │   └── ScoreRunTrigger.tsx          # Scoring trigger UI
+│   │   │   ├── AddOrGenerateSurveyDialog.tsx
+│   │   │   ├── ApplicationLoadingIndicator.tsx
+│   │   │   ├── ChangePasswordModal.tsx
+│   │   │   ├── FrameworkPacksTable.tsx
+│   │   │   ├── NavigationSidebar.tsx
+│   │   │   ├── ProjectEditDialog.tsx
+│   │   │   ├── ProjectManagementControls.tsx
+│   │   │   ├── ProjectRemovalControl.tsx
+│   │   │   ├── ProjectsTable.tsx
+│   │   │   ├── ProjectTableRow.tsx
+│   │   │   ├── ScoringEngineController.tsx
+│   │   │   ├── SurveyBulkManager.tsx
+│   │   │   ├── SurveyDisplayWidget.tsx
+│   │   │   ├── SurveyOrchestrator.tsx
+│   │   │   ├── SurveyStateManager.tsx
+│   │   │   ├── UserProfileProvider.tsx
+│   │   │   └── settings/
+│   │   │       ├── ActivityLogPanel.tsx
+│   │   │       ├── BrandingSettingsForm.tsx
+│   │   │       ├── DownloadPanel.tsx
+│   │   │       ├── NotificationsPanel.tsx
+│   │   │       ├── SettingsTabs.tsx
+│   │   │       └── UserManagementPanel.tsx
 │   │   ├── dashboard/
-│   │   │   ├── IndexScoreCard.tsx           # Color-coded index score card
-│   │   │   ├── IssueRankingTable.tsx        # Priority-sorted issue table
-│   │   │   └── CategoryChart.tsx            # Radar + bar chart (Recharts)
+│   │   │   ├── AIInsightsPanel.tsx
+│   │   │   ├── AnalyticsCategoryVisualizer.tsx
+│   │   │   ├── AssessmentFrameworkPicker.tsx
+│   │   │   ├── DashboardAutoInsights.tsx
+│   │   │   ├── DashboardCharts.tsx
+│   │   │   ├── ExecutionHistoryTracker.tsx
+│   │   │   ├── MetricsOverviewCard.tsx
+│   │   │   ├── PriorityIssuesDisplay.tsx
+│   │   │   └── TimeperiodSelector.tsx
 │   │   ├── reports/
-│   │   │   └── ReportExportButton.tsx       # Client-side PDF trigger
+│   │   │   ├── ReportDownloadController.tsx
+│   │   │   └── ReportSharingManager.tsx
 │   │   └── survey/
-│   │       └── SurveyFlow.tsx               # Respondent survey UI
+│   │       └── InteractiveSurveyRenderer.tsx
 │   │
 │   ├── lib/
-│   │   ├── supabase/
-│   │   │   ├── client.ts                    # Browser Supabase client
-│   │   │   ├── server.ts                    # Server-side Supabase client
-│   │   │   └── middleware.ts                # Middleware session updater
+│   │   ├── activity/ActivityLogger.ts                  # Activity event logging
+│   │   ├── ai/IntelligenceAnalyticsProcessor.ts        # AI analytics processor
+│   │   ├── auth/
+│   │   │   ├── AccessControlGuard.ts
+│   │   │   ├── UserPermissionDefinitions.ts
+│   │   │   └── UserProfileRetriever.ts
+│   │   ├── email/                                      # Email sending utilities
+│   │   ├── framework/AssessmentFrameworkCapture.ts     # Framework snapshot utility
+│   │   ├── reports/DocumentGenerationService.ts        # PDF report generator
 │   │   ├── scoring/
-│   │   │   ├── engine.ts                    # Deterministic scoring pipeline
-│   │   │   └── __tests__/engine.test.ts     # 27 unit tests (all passing)
-│   │   ├── reports/
-│   │   │   └── pdf.ts                       # PDF report generator
-│   │   ├── ai/
-│   │   │   └── insights.ts                  # AI summary generator
-│   │   └── framework/
-│   │       └── snapshot.ts                  # Framework snapshot utility
+│   │   │   ├── AssessmentScoringEngine.ts              # Deterministic scoring pipeline
+│   │   │   ├── AIAssessmentScoringEngine.ts            # AI-assisted scoring
+│   │   │   └── __tests__/AssessmentScoringEngine.test.ts
+│   │   ├── settings/AppSettingsLoader.ts               # App settings loader
+│   │   └── supabase/
+│   │       ├── AuthenticationMiddleware.ts
+│   │       ├── DatabaseClientManager.ts                # Browser Supabase client
+│   │       └── ServerSideDbConnector.ts                # Server-side Supabase client
 │   │
 │   ├── types/
-│   │   └── database.ts                      # TypeScript types for all DB tables
-│   └── middleware.ts                        # Route protection (/app → /login)
+│   │   └── DatabaseSchemaDefinitions.ts                # TypeScript types for all DB tables
+│   └── proxy.ts
 │
-├── .env.local                               # Environment variables (fill in)
-├── jest.config.ts                           # Jest + ts-jest configuration
-├── next.config.ts                           # Next.js config
-├── tailwind.config.ts                       # Tailwind CSS config
-└── tsconfig.json                            # TypeScript config
+├── public/
+│   └── images/
+│       └── NexSurveySolutionsLogo.png
+├── .env.local                                          # Environment variables (fill in)
+├── jest.config.ts
+├── next.config.ts
+├── postcss.config.mjs
+└── tsconfig.json
 ```
 
 ---
@@ -376,30 +459,6 @@ All AI-generated content is clearly labeled **"AI-Generated Summary (Non-Scoring
 
 ---
 
-## Sprint / Team Tasks
-
-Suggested allocation for a 5-intern team:
-
-| Sprint | Task | Owner |
-|---|---|---|
-| **Sprint 1** | Supabase setup, run migrations, verify schema | Intern 1 |
-| **Sprint 1** | Supabase Auth setup, login page testing | Intern 2 |
-| **Sprint 1** | Environment config, local dev setup for all | DevLead |
-| **Sprint 2** | Project intake form → project detail page | Intern 1 |
-| **Sprint 2** | SurveyManager + framework snapshot API | Intern 2 |
-| **Sprint 2** | Survey respondent flow (SurveyFlow component) | Intern 3 |
-| **Sprint 3** | Scoring engine integration test (real DB) | Intern 4 |
-| **Sprint 3** | Dashboard page + IndexScoreCard + CategoryChart | Intern 3 |
-| **Sprint 3** | IssueRankingTable + ScoreRunTrigger | Intern 5 |
-| **Sprint 4** | PDF report generation + ReportExportButton | Intern 1 |
-| **Sprint 4** | AI insights API + insights section in dashboard | Intern 2 |
-| **Sprint 4** | RLS policy verification + security audit | DevLead |
-| **Sprint 5** | End-to-end testing (full flow) | All |
-| **Sprint 5** | Performance + mobile testing of survey flow | Intern 3 |
-| **Sprint 5** | Deployment to Vercel + production Supabase | DevLead |
-
----
-
 ## Deployment Checklist
 
 ### Vercel Deployment
@@ -411,11 +470,12 @@ Suggested allocation for a 5-intern team:
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `GEMINI_API_KEY`
+   - `GROQ_API_KEY` (if using Groq)
 4. Deploy
 
 ### Production Supabase Checklist
 
-- [ ] Migrations 001–004 run successfully
+- [ ] All 11 migrations run successfully (001–007, 011–014)
 - [ ] RLS enabled on all tables (verify via Dashboard > Database > Tables)
 - [ ] Anonymous sign-ins enabled (for survey respondents)
 - [ ] Email confirmation configured (for admin user signups)
@@ -424,7 +484,7 @@ Suggested allocation for a 5-intern team:
 ### Post-Deploy Verification
 
 1. Visit `/login` → sign up → confirm redirect to `/app`
-2. Visit `/app/frameworks` → confirm CX framework pack is listed
+2. Visit `/app/frameworks` → confirm framework packs are listed
 3. Create a test project → create a survey → copy the token URL
 4. Open token URL in incognito → complete the survey
 5. Back in admin: trigger scoring for the survey project
@@ -432,15 +492,6 @@ Suggested allocation for a 5-intern team:
 
 ---
 
-## Known Limitations (MVP)
-
-- **Framework packs are managed via SQL only** — no admin UI for creating new packs
-- **Single framework version** — the CX Framework v1.0 is the only seeded pack
-- **RPC type casting** — `supabase.rpc('increment_token_response_count' as any, ...)` uses `as any` due to missing auto-generated Supabase types; resolve by running `supabase gen types typescript` after deployment
-- **PDF is client-side only** — PDF generation runs in the browser; for large reports, server-side generation may be needed in a future sprint
-
----
-
 ## License
 
-Internal use only — Decision Intelligence Platform MVP, 2025.
+Internal use only — Decision Intelligence Platform, 2025–2026.
