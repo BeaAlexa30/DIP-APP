@@ -19,11 +19,13 @@ export default function CategoryChart({ categories }: { categories: CategoryData
     return <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data yet</div>
   }
 
-  const data = categories.map(c => ({
-    subject: c.name.split(' ').slice(0, 2).join(' '), // shorten for radar
-    score: Number(c.score.toFixed(1)),
-    fullMark: 100,
-  }))
+  const data = categories
+    .filter(c => c.name != null)
+    .map(c => ({
+      subject: c.name.split(' ').slice(0, 2).join(' '), // shorten for radar
+      score: Number(c.score.toFixed(1)),
+      fullMark: 100,
+    }))
 
   return (
   <div className="space-y-6">
@@ -48,7 +50,7 @@ export default function CategoryChart({ categories }: { categories: CategoryData
 
     {/* Bar breakdown: Always visible, but more compact on mobile */}
     <div className="grid grid-cols-1 gap-3">
-      {categories.map(cat => (
+      {categories.filter(cat => cat.name != null).map(cat => (
         <div key={cat.name} className="bg-gray-50 p-2 rounded-lg border border-gray-100 sm:bg-transparent sm:p-0 sm:border-0">
           <div className="flex justify-between text-xs mb-1">
             <span className="text-gray-600 font-medium truncate pr-4">{cat.name}</span>
