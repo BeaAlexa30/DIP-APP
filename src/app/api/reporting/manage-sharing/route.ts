@@ -66,8 +66,8 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Failed to create shareable link' }, { status: 500 })
   }
 
-  // Generate the shareable URL
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
+  // Generate the shareable URL using the actual request origin so it works correctly on any deployment
+  const baseUrl = req.nextUrl.origin
   const shareUrl = `${baseUrl}/share/report/${token}`
 
   getUserInfo(authResult.userId).then(u =>
