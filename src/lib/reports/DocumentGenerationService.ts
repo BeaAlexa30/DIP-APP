@@ -215,6 +215,7 @@ export function generatePDFReport(data: ReportData): Blob {
   const chartX = margin + 5
   
   data.scoring.categoryScores.forEach((cat, i) => {
+    if (!cat.categoryName) return
     checkPage(20)
     
     // Category label
@@ -725,10 +726,12 @@ export function generatePDFReport(data: ReportData): Blob {
   const topIssues = data.scoring.issueRankings.slice(0, 3)
   for (let i = 0; i < topIssues.length; i++) {
     const issue = topIssues[i]
+    if (!issue) continue
     checkPage(20)
+    const driverLabel = issue.driverTag ? issue.driverTag.replace(/_/g, ' ') : 'Unknown'
     addBody(
-      `${i + 1}. Address "${issue.driverTag.replace(/_/g, ' ')}" — Priority Score: ${issue.priorityScore.toFixed(2)}. ` +
-      `Risk: ${issue.risk.toFixed(1)}%, Friction: ${issue.friction.toFixed(1)}%.\n` +
+      `${i + 1}. Address "${driverLabel}" — Priority Score: ${issue.priorityScore?.toFixed(2) ?? 'N/A'}. ` +
+      `Risk: ${issue.risk?.toFixed(1) ?? 'N/A'}%, Friction: ${issue.friction?.toFixed(1) ?? 'N/A'}%.\n` +
       `   Recommended: Investigate root cause, run targeted UX review, A/B test improvements.`
     )
   }
