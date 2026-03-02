@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
+import { useMemo, useState } from 'react'
 
 export default function ChangePasswordModal({ required }: { required: boolean }) {
   const router = useRouter()
@@ -12,11 +13,11 @@ export default function ChangePasswordModal({ required }: { required: boolean })
   const [showPassword, setShowPassword] = useState(false)
 
   const validation = useMemo(() => ({
-    length:    newPassword.length >= 8,
+    length: newPassword.length >= 8,
     uppercase: /[A-Z]/.test(newPassword),
     lowercase: /[a-z]/.test(newPassword),
-    number:    /[0-9]/.test(newPassword),
-    special:   /[!@#$%^&*(),.?":{}|<>]/.test(newPassword),
+    number: /[0-9]/.test(newPassword),
+    special: /[!@#$%^&*(),.?":{}|<>]/.test(newPassword),
   }), [newPassword])
 
   const isValid = Object.values(validation).every(Boolean)
@@ -85,10 +86,12 @@ export default function ChangePasswordModal({ required }: { required: boolean })
                 className="w-full px-3 py-2.5 pr-10 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                 placeholder="••••••••"
               />
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowPassword(v => !v)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                variant="ghost"
+                size="icon-sm"
+                className="absolute inset-y-0 right-0 mr-1 text-gray-400 hover:text-gray-600"
               >
                 {showPassword ? (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,51 +103,51 @@ export default function ChangePasswordModal({ required }: { required: boolean })
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                 )}
-              </button>
+              </Button>
+
+              {newPassword && (
+                <div className="mt-2 space-y-0.5">
+                  <Checkbox ok={validation.length} label="At least 8 characters" />
+                  <Checkbox ok={validation.uppercase} label="One uppercase letter" />
+                  <Checkbox ok={validation.lowercase} label="One lowercase letter" />
+                  <Checkbox ok={validation.number} label="One number" />
+                  <Checkbox ok={validation.special} label="One special character (!@#$%^&*)" />
+                </div>
+              )}
             </div>
 
-            {newPassword && (
-              <div className="mt-2 space-y-0.5">
-                <Checkbox ok={validation.length}    label="At least 8 characters" />
-                <Checkbox ok={validation.uppercase} label="One uppercase letter" />
-                <Checkbox ok={validation.lowercase} label="One lowercase letter" />
-                <Checkbox ok={validation.number}    label="One number" />
-                <Checkbox ok={validation.special}   label="One special character (!@#$%^&*)" />
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Confirm Password</label>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                required
+                autoComplete="new-password"
+                className={`w-full px-3 py-2.5 border rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 ${confirm && !passwordsMatch ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                placeholder="••••••••"
+              />
+              {confirm && !passwordsMatch && (
+                <p className="text-xs text-red-500 mt-1">Passwords do not match.</p>
+              )}
+            </div>
+
+            {error && (
+              <div className="text-xs px-3 py-2 rounded-lg border bg-red-50 text-red-600 border-red-200">
+                {error}
               </div>
             )}
+
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Confirm Password</label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={confirm}
-              onChange={e => setConfirm(e.target.value)}
-              required
-              autoComplete="new-password"
-              className={`w-full px-3 py-2.5 border rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 ${
-                confirm && !passwordsMatch ? 'border-red-300' : 'border-gray-200'
-              }`}
-              placeholder="••••••••"
-            />
-            {confirm && !passwordsMatch && (
-              <p className="text-xs text-red-500 mt-1">Passwords do not match.</p>
-            )}
-          </div>
-
-          {error && (
-            <div className="text-xs px-3 py-2 rounded-lg border bg-red-50 text-red-600 border-red-200">
-              {error}
-            </div>
-          )}
-
-          <button
+          <Button
             type="submit"
             disabled={loading || !isValid || !passwordsMatch}
-            className="w-full py-2.5 px-4 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-violet-600 hover:bg-violet-500 rounded-lg"
           >
             {loading ? 'Saving…' : 'Set Password & Continue'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

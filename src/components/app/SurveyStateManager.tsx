@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { useCan } from './UserProfileProvider'
 
 interface Props {
@@ -53,20 +54,19 @@ export default function SurveyStatusControl({ surveyId, currentStatus, projectAr
 
   return (
     <div className="space-y-2">
-      <button
+      <Button
         onClick={handleToggle}
         disabled={loading || (isClosed && projectArchived)}
         title={isClosed && projectArchived ? 'Reopen the project first to re-open this survey' : undefined}
-        className={`w-full text-sm font-medium px-3 py-2 rounded-lg transition-colors disabled:opacity-50 ${
-          isClosed && projectArchived
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+        className={`w-full rounded-lg ${isClosed && projectArchived
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed hover:bg-gray-100'
             : isClosed
-            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-            : 'bg-red-100 text-red-700 hover:bg-red-200'
-        }`}
+              ? 'bg-green-600 hover:bg-green-700'
+              : 'bg-red-500 hover:bg-red-600'
+          }`}
       >
         {loading ? (isClosed ? 'Reopening...' : 'Closing...') : buttonText}
-      </button>
+      </Button>
 
       {isClosed && projectArchived && (
         <p className="text-xs text-gray-400 text-center">

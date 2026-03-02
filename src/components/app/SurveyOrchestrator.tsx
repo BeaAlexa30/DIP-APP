@@ -1,10 +1,11 @@
 'use client'
 
 import LoadingScreen from '@/components/app/ApplicationLoadingIndicator'
+import { useCan } from '@/components/app/UserProfileProvider'
+import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { useCan } from '@/components/app/UserProfileProvider'
 import SurveyStatusControl from './SurveyStateManager'
 
 interface Pack {
@@ -159,54 +160,54 @@ export default function SurveyManager({
         <div className="p-6">
           {!activeSurvey ? (
             canAssign ? (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Framework Pack
-                </label>
-                <div className="space-y-2">
-                  {packs.map(pack => (
-                    <label
-                      key={pack.id}
-                      className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${selectedPackId === pack.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                    >
-                      <input
-                        type="radio"
-                        name="pack"
-                        value={pack.id}
-                        checked={selectedPackId === pack.id}
-                        onChange={() => setSelectedPackId(pack.id)}
-                        className="mt-0.5"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {pack.name}
-                          <span className="ml-2 text-xs text-gray-400">v{pack.version}</span>
-                        </p>
-                        {pack.description && (
-                          <p className="text-xs text-gray-500 mt-0.5">{pack.description}</p>
-                        )}
-                      </div>
-                    </label>
-                  ))}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Framework Pack
+                  </label>
+                  <div className="space-y-2">
+                    {packs.map(pack => (
+                      <label
+                        key={pack.id}
+                        className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${selectedPackId === pack.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                      >
+                        <input
+                          type="radio"
+                          name="pack"
+                          value={pack.id}
+                          checked={selectedPackId === pack.id}
+                          onChange={() => setSelectedPackId(pack.id)}
+                          className="mt-0.5"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {pack.name}
+                            <span className="ml-2 text-xs text-gray-400">v{pack.version}</span>
+                          </p>
+                          {pack.description && (
+                            <p className="text-xs text-gray-500 mt-0.5">{pack.description}</p>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 </div>
+
+                {error && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-lg">{error}</p>
+                )}
+
+                <Button
+                  onClick={handleCreateSurvey}
+                  disabled={loading || !selectedPackId}
+                  className="w-full rounded-lg"
+                >
+                  {loading ? 'Generating Survey…' : 'Generate & Publish Survey'}
+                </Button>
               </div>
-
-              {error && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-lg">{error}</p>
-              )}
-
-              <button
-                onClick={handleCreateSurvey}
-                disabled={loading || !selectedPackId}
-                className="w-full bg-blue-600 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                {loading ? 'Generating Survey…' : 'Generate & Publish Survey'}
-              </button>
-            </div>
             ) : (
               <div className="py-8 text-center">
                 <p className="text-3xl mb-2">📋</p>
@@ -251,15 +252,16 @@ export default function SurveyManager({
                       value={surveyUrl}
                       className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600 font-mono"
                     />
-                    <button
+                    <Button
                       onClick={copyLink}
-                      className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${tokenCopied
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      size="sm"
+                      className={`rounded-lg ${tokenCopied
+                          ? 'bg-green-600 hover:bg-green-700'
+                          : 'bg-gray-700 hover:bg-gray-900'
                         }`}
                     >
                       {tokenCopied ? 'Copied!' : 'Copy'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -267,18 +269,18 @@ export default function SurveyManager({
               {/* No token yet — recovery button (admin only) */}
               {!surveyUrl && activeSurvey.status === 'published' && canAssign && (
                 <div>
-                  <button
+                  <Button
                     onClick={handleGenerateLink}
                     disabled={loading}
-                    className="w-full bg-blue-600 text-white text-sm font-medium py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    className="w-full rounded-lg"
                   >
                     {loading ? 'Generating…' : 'Generate Survey Link'}
-                  </button>
+                  </Button>
                 </div>
               )}
 
               {/* Survey lifecycle control */}
-              <SurveyStatusControl 
+              <SurveyStatusControl
                 surveyId={activeSurvey.id}
                 currentStatus={activeSurvey.status as 'draft' | 'published' | 'closed'}
               />

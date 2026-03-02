@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Button } from '@/components/ui/button'
+import { useCallback, useEffect, useState } from 'react'
 
 interface PendingUser {
   id: string
@@ -110,20 +111,23 @@ export default function NotificationsPanel() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
+                      <Button
                         disabled={processing[user.id]}
                         onClick={() => handleAction(user.id, 'approve')}
-                        className="px-2.5 py-1 text-xs font-medium bg-green-100 hover:bg-green-200 text-green-700 border border-green-200 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+                        size="xs"
+                        className="bg-green-600 hover:bg-green-700 whitespace-nowrap"
                       >
                         Approve
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         disabled={processing[user.id]}
                         onClick={() => handleAction(user.id, 'reject')}
-                        className="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+                        variant="destructive"
+                        size="xs"
+                        className="whitespace-nowrap"
                       >
                         Reject
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>

@@ -1,10 +1,19 @@
 'use client'
 
 import {
-  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  AreaChart, Area,
-} from 'recharts'
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis, YAxis,
+} from 'recharts';
 
 interface Props {
   projectsByStatus: { name: string; value: number; color: string }[]
@@ -55,7 +64,7 @@ export default function DashboardCharts({ projectsByStatus, surveysByStatus, pro
             <h3 className="text-sm font-semibold text-gray-800">Total Projects</h3>
             <p className="text-xs text-gray-400 mt-0.5">Distribution by status</p>
           </div>
-          <span className="text-2xl font-bold text-blue-600">{totalProjects}</span>
+          <span className="text-2xl font-bold text-[#00B3B0]">{totalProjects}</span>
         </div>
         {totalProjects > 0 ? (
           <ResponsiveContainer width="100%" height={200}>
@@ -95,7 +104,7 @@ export default function DashboardCharts({ projectsByStatus, surveysByStatus, pro
             <h3 className="text-sm font-semibold text-gray-800">Active Surveys</h3>
             <p className="text-xs text-gray-400 mt-0.5">Breakdown by survey status</p>
           </div>
-          <span className="text-2xl font-bold text-green-600">
+          <span className="text-2xl font-bold text-[#007775]">
             {surveysByStatus.find(s => s.name === 'Published')?.value ?? 0}
           </span>
         </div>
@@ -125,15 +134,15 @@ export default function DashboardCharts({ projectsByStatus, surveysByStatus, pro
             <h3 className="text-sm font-semibold text-gray-800">Framework Packs</h3>
             <p className="text-xs text-gray-400 mt-0.5">Active packs &amp; project trend</p>
           </div>
-          <span className="text-2xl font-bold text-purple-600">{frameworkCount}</span>
+          <span className="text-2xl font-bold text-[#005f5e]">{frameworkCount}</span>
         </div>
 
         {/* Mini framework stat */}
         <div className="flex items-center gap-2 mb-3 mt-1">
           <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
             <div
-              className="bg-purple-500 h-2 rounded-full transition-all"
-              style={{ width: `${Math.min(frameworkCount * 10, 100)}%` }}
+              className="h-2 rounded-full transition-all"
+              style={{ width: `${Math.min(frameworkCount * 10, 100)}%`, backgroundColor: '#00B3B0' }}
             />
           </div>
           <span className="text-xs text-gray-400">{frameworkCount} active</span>
@@ -146,8 +155,8 @@ export default function DashboardCharts({ projectsByStatus, surveysByStatus, pro
             <AreaChart data={projectTrend} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
               <defs>
                 <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#00B3B0" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#00B3B0" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
@@ -158,10 +167,10 @@ export default function DashboardCharts({ projectsByStatus, surveysByStatus, pro
                 type="monotone"
                 dataKey="projects"
                 name="Projects"
-                stroke="#8b5cf6"
+                stroke="#00B3B0"
                 strokeWidth={2}
                 fill="url(#trendGrad)"
-                dot={{ r: 3, fill: '#8b5cf6', strokeWidth: 0 }}
+                dot={{ r: 3, fill: '#00B3B0', strokeWidth: 0 }}
                 activeDot={{ r: 5 }}
               />
             </AreaChart>

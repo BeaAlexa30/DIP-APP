@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/DatabaseClientManager'
-import SurveyStatusControl from './SurveyStateManager'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import ScoreRunTrigger from './ScoringEngineController'
+import SurveyStatusControl from './SurveyStateManager'
 
 interface SurveyToken {
   id: string
@@ -75,9 +75,8 @@ export default function SurveyCard({ survey, projectId, responseCount, latestSco
   }
 
   return (
-    <div className={`bg-white rounded-xl border overflow-hidden transition-shadow ${
-      selected ? 'border-blue-400 shadow-md shadow-blue-100' : 'border-gray-200'
-    }`}>
+    <div className={`bg-white rounded-xl border overflow-hidden transition-shadow ${selected ? 'border-blue-400 shadow-md shadow-blue-100' : 'border-gray-200'
+      }`}>
       {/* Header */}
       <div className="relative px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
         {/* Selection Checkbox */}
@@ -97,11 +96,10 @@ export default function SurveyCard({ survey, projectId, responseCount, latestSco
               Version {frameworkVersion}
             </p>
           </div>
-          <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${
-            survey.status === 'published' ? 'bg-green-100 text-green-700' : 
-            survey.status === 'closed' ? 'bg-gray-100 text-gray-500' : 
-            'bg-yellow-100 text-yellow-700'
-          }`}>
+          <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${survey.status === 'published' ? 'bg-green-100 text-green-700' :
+              survey.status === 'closed' ? 'bg-gray-100 text-gray-500' :
+                'bg-yellow-100 text-yellow-700'
+            }`}>
             {survey.status}
           </span>
         </div>
@@ -130,29 +128,29 @@ export default function SurveyCard({ survey, projectId, responseCount, latestSco
                 value={surveyUrl}
                 className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600 font-mono"
               />
-              <button
+              <Button
                 onClick={copyLink}
-                className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
-                  tokenCopied
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                size="sm"
+                className={`rounded-lg ${tokenCopied
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-gray-700 hover:bg-gray-900'
+                  }`}
               >
                 {tokenCopied ? 'Copied!' : 'Copy'}
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
         {/* No token yet */}
         {!surveyUrl && survey.status === 'published' && (
-          <button
+          <Button
             onClick={handleGenerateLink}
             disabled={loading}
-            className="w-full bg-blue-600 text-white text-sm font-medium py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="w-full rounded-lg"
           >
             {loading ? 'Generating…' : 'Generate Survey Link'}
-          </button>
+          </Button>
         )}
 
         {/* Latest Score Run */}
@@ -193,7 +191,7 @@ export default function SurveyCard({ survey, projectId, responseCount, latestSco
             </div>
           )}
 
-          <SurveyStatusControl 
+          <SurveyStatusControl
             surveyId={survey.id}
             currentStatus={survey.status as 'draft' | 'published' | 'closed'}
             projectArchived={projectArchived}

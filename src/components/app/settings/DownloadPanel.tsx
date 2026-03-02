@@ -1,5 +1,6 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
 const ENV_TEMPLATE = `# ── Supabase ──────────────────────────────────────────────
@@ -189,14 +190,16 @@ export default function DownloadPanel() {
             <code className="bg-gray-200 px-1 rounded text-gray-700">.git</code>. No secrets included.
           </p>
         </div>
-        <button
+        <Button
           onClick={handleDownloadProject}
           disabled={downloadingProject}
-          className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+          variant="secondary"
+          size="lg"
+          className="shrink-0 bg-[#00B3B0] hover:bg-[#009E9B] text-white rounded-xl"
         >
           <span>{downloadingProject ? '⏳' : '↓'}</span>
           {downloadingProject ? 'Zipping… please wait' : 'Download ZIP'}
-        </button>
+        </Button>
       </div>
 
       {/* Step-by-step guide */}
@@ -209,7 +212,7 @@ export default function DownloadPanel() {
             <div key={step.number} className="border border-gray-200 rounded-xl overflow-hidden">
               {/* Step header */}
               <div className="flex items-center gap-3 px-5 py-4 bg-white">
-                <span className="shrink-0 w-8 h-8 rounded-full bg-gray-900 text-white text-xs font-bold flex items-center justify-center">
+                <span className="shrink-0 w-8 h-8 rounded-full bg-[#00B3B0] text-white text-xs font-bold flex items-center justify-center">
                   {step.number}
                 </span>
                 <span className="text-base">{step.icon}</span>
@@ -238,12 +241,14 @@ export default function DownloadPanel() {
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-medium text-gray-500">.env.local template</span>
-                      <button
+                      <Button
                         onClick={handleCopyEnv}
-                        className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-400 px-2.5 py-1 rounded-lg transition-colors"
+                        variant="outline"
+                        size="xs"
+                        className="rounded-lg"
                       >
                         {copiedEnv ? '✓ Copied' : 'Copy'}
-                      </button>
+                      </Button>
                     </div>
                     <pre className="bg-gray-950 text-green-400 text-xs rounded-lg p-4 overflow-x-auto leading-relaxed whitespace-pre">
                       {step.code}

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/DatabaseClientManager'
+import { Button } from '@/components/ui/button'
 import type { AppSettings } from '@/lib/settings/AppSettingsLoader'
+import { createClient } from '@/lib/supabase/DatabaseClientManager'
+import { useState } from 'react'
 
 interface Props {
   initialSettings: AppSettings
@@ -69,7 +70,7 @@ export default function BrandingSettingsForm({ initialSettings }: Props) {
           type="text"
           value={companyName}
           onChange={e => setCompanyName(e.target.value)}
-          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00B3B0]"
           placeholder="Decision Intelligence"
         />
         <p className="text-xs text-gray-400 mt-1">Displayed in the sidebar and page header.</p>
@@ -90,9 +91,9 @@ export default function BrandingSettingsForm({ initialSettings }: Props) {
           accept="image/*"
           onChange={handleLogoUpload}
           disabled={uploading}
-          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 disabled:opacity-50"
+          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-[#00B3B0]/10 file:text-[#00B3B0] hover:file:bg-[#00B3B0]/20 disabled:opacity-50"
         />
-        {uploading && <p className="text-xs text-violet-500 mt-1">Uploading…</p>}
+        {uploading && <p className="text-xs text-[#00B3B0] mt-1">Uploading…</p>}
         <p className="text-xs text-gray-400 mt-1">PNG or SVG recommended. Shown at 40&times;40 px in the sidebar.</p>
       </div>
 
@@ -110,7 +111,7 @@ export default function BrandingSettingsForm({ initialSettings }: Props) {
             type="text"
             value={primaryColor}
             onChange={e => setPrimaryColor(e.target.value)}
-            className="w-32 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-32 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#00B3B0]"
             placeholder="#6d28d9"
           />
         </div>
@@ -124,7 +125,7 @@ export default function BrandingSettingsForm({ initialSettings }: Props) {
           type="text"
           value={footerTagline}
           onChange={e => setFooterTagline(e.target.value)}
-          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00B3B0]"
           placeholder="Internal Decision Intelligence Platform"
         />
         <p className="text-xs text-gray-400 mt-1">Short tagline shown under the platform name in the sidebar.</p>
@@ -132,22 +133,21 @@ export default function BrandingSettingsForm({ initialSettings }: Props) {
 
       {/* Status message */}
       {message && (
-        <div className={`text-sm px-3 py-2 rounded-lg border ${
-          message.type === 'success'
-            ? 'bg-green-50 text-green-700 border-green-200'
-            : 'bg-red-50 text-red-600 border-red-200'
-        }`}>
+        <div className={`text-sm px-3 py-2 rounded-lg border ${message.type === 'success'
+          ? 'bg-green-50 text-green-700 border-green-200'
+          : 'bg-red-50 text-red-600 border-red-200'
+          }`}>
           {message.text}
         </div>
       )}
 
-      <button
+      <Button
         onClick={handleSave}
         disabled={saving || uploading}
-        className="px-6 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="bg-[#00B3B0] hover:bg-[#009E9B] rounded-lg"
       >
         {saving ? 'Saving…' : 'Save Branding'}
-      </button>
+      </Button>
     </div>
   )
 }

@@ -1,8 +1,8 @@
-import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
-import { getCurrentProfile } from '@/lib/auth/UserProfileRetriever'
-import { can } from '@/lib/auth/UserPermissionDefinitions'
-import Link from 'next/link'
 import ProjectsTable from '@/components/app/ProjectsTable'
+import { can } from '@/lib/auth/UserPermissionDefinitions'
+import { getCurrentProfile } from '@/lib/auth/UserProfileRetriever'
+import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
+import Link from 'next/link'
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
@@ -28,7 +28,7 @@ export default async function ProjectsPage() {
     const surveys = (p.surveys ?? []) as unknown as Array<{ id: string; status: string }>
     const surveyCount = surveys.length
     const survey = surveys[0]
-    
+
     return {
       ...p,
       survey_status: survey?.status ?? null,
@@ -46,7 +46,7 @@ export default async function ProjectsPage() {
         {canCreate && (
           <Link
             href="/app/projects/new"
-            className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="bg-[#00B3B0] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#009A98] transition-colors"
           >
             + New Project
           </Link>
