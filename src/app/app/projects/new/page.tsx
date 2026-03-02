@@ -1,10 +1,11 @@
 'use client'
 
+import { useCan } from '@/components/app/UserProfileProvider'
+import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { useCan } from '@/components/app/UserProfileProvider'
 
 const STAGE_OPTIONS = ['Discovery', 'Growth', 'Optimization', 'Retention', 'Turnaround']
 const CHANNEL_OPTIONS = ['Web', 'Mobile App', 'In-store', 'Phone/Call Center', 'Email', 'Social Media', 'Marketplace']
@@ -177,13 +178,12 @@ export default function NewProjectPage() {
           >
             Cancel
           </button>
-          <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-500 transition-colors"
+          <Button
+            type="submit"
+            disabled={loading}
+            className="bg-[#00B3B0] hover:bg-[#009E9B] text-white rounded-lg"
           >
-            <AnimatePresence>
+            <AnimatePresence mode="wait">
               {loading ? (
                 <motion.span
                   key="loading"
@@ -213,7 +213,7 @@ export default function NewProjectPage() {
                 </motion.span>
               )}
             </AnimatePresence>
-          </motion.button>
+          </Button>
         </div>
       </form>
     </div>

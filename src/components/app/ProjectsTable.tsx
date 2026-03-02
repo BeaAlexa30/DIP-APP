@@ -577,7 +577,7 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
                       <Button
                         onClick={() => { setDeleteTarget(p); setDeleteConfirmInput(''); setDeleteError(null) }}
                         variant="outline"
-                        size="xs"
+                        size="sm"
                         className="text-red-600 hover:text-red-800 border-red-200 hover:border-red-400 hover:bg-red-50 rounded-lg"
                       >
                         Delete

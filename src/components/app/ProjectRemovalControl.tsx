@@ -1,6 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import { Archive, RotateCcw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
@@ -76,11 +77,19 @@ export default function ArchiveProjectButton({ projectId, projectName, currentSt
           <Button
             onClick={handleStatusChange}
             disabled={loading}
-            className={`rounded-lg ${isArchived ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-600 hover:bg-amber-700'}`}
+            className={`rounded-lg ${isArchived
+              ? ''
+              : 'bg-[#00B3B0]/20 text-[#007A78] hover:bg-[#00B3B0]/30'
+              }`}
           >
             {loading
               ? (isArchived ? 'Reopening...' : 'Archiving...')
-              : (isArchived ? 'Yes, Reopen Project' : 'Yes, Archive Project')}
+              : (
+                <div className="flex items-center gap-2">
+                  {isArchived ? <RotateCcw className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                  <span>{isArchived ? 'Yes, Reopen Project' : 'Yes, Archive Project'}</span>
+                </div>
+              )}
           </Button>
           <Button
             onClick={() => setShowConfirm(false)}
@@ -98,9 +107,15 @@ export default function ArchiveProjectButton({ projectId, projectName, currentSt
   return (
     <Button
       onClick={() => setShowConfirm(true)}
-      className={`rounded-lg ${isArchived ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-600 hover:bg-amber-700'}`}
+      className={`rounded-lg ${isArchived
+        ? ''
+        : 'bg-[#00B3B0]/20 text-[#007A78] hover:bg-[#00B3B0]/30'
+        }`}
     >
-      {isArchived ? '↻ Reopen Project' : '🗄 Archive Project'}
+      <div className="flex items-center gap-2">
+        {isArchived ? <RotateCcw className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+        <span>{isArchived ? 'Reopen Project' : 'Archive Project'}</span>
+      </div>
     </Button>
   )
 }

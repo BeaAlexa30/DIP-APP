@@ -171,6 +171,7 @@ export default function SurveyFlow({
                     <Button
                       key={opt.value_key}
                       onClick={() => handleAnswer(current.id, opt.value_key)}
+                      variant={answers[current.id] === opt.value_key ? 'default' : 'outline'}
                       className="w-full text-left px-4 py-3 rounded-xl text-sm transition-all"
                     >
                       {opt.label}
@@ -251,6 +252,7 @@ export default function SurveyFlow({
                         <Button
                           key={num}
                           onClick={() => handleAnswer(current.id, num.toString())}
+                          variant={answers[current.id] === num.toString() ? 'default' : 'outline'}
                           className={`${scaleValues.length <= 11 ? 'aspect-square' : 'px-4 py-2'} flex items-center justify-center rounded-lg text-sm font-semibold transition-all`}
                         >
                           {num}{isPercentage && num === max ? '%' : ''}
@@ -291,6 +293,7 @@ export default function SurveyFlow({
         <div className="max-w-xl mx-auto flex gap-3">
           {currentIndex > 0 && (
             <Button
+              variant={'outline'}
               onClick={handleBack}
             >
               ← Back

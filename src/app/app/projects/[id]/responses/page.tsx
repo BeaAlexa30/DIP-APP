@@ -54,9 +54,9 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
         {/* Full-width Navigation Bar */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center gap-4">
-            <Link 
-              href={`/app/projects/${projectId}`} 
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-2"
+            <Link
+              href={`/app/projects/${projectId}`}
+              className="text-[#009E9B] hover:text-[#00B3B0] text-sm font-medium flex items-center gap-2"
             >
               ← Back to Project
             </Link>
@@ -66,7 +66,7 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
             </div>
           </div>
         </div>
-        
+
         {/* Content */}
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
@@ -130,8 +130,8 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link 
-              href={`/app/projects/${projectId}`} 
+            <Link
+              href={`/app/projects/${projectId}`}
               className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-2"
             >
               ← Back to Project
@@ -177,7 +177,7 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
               />
             ))}
           </div>
-      )}
+        )}
       </div>
     </div>
   )

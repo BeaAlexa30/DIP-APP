@@ -492,7 +492,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                           checked={activeMap[pack.id] ?? pack.active}
                           onCheckedChange={() => handleToggle(pack.id)}
                           disabled={toggling[pack.id]}
-                          className="no-print"
+                          className="no-print data-[state=checked]:bg-green-500"
                           title={(activeMap[pack.id] ?? pack.active) ? 'Click to deactivate' : 'Click to activate'}
                           onClick={(e) => e.stopPropagation()}
                         />
@@ -529,7 +529,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                       <Button
                         onClick={(e) => { e.stopPropagation(); setDeleteTarget(pack); setDeleteConfirmInput(''); setDeleteError(null) }}
                         variant="outline"
-                        size="xs"
+                        size="sm"
                         className="text-red-600 hover:text-red-800 border-red-200 hover:border-red-400 hover:bg-red-50 rounded-lg"
                       >
                         Delete

@@ -195,7 +195,7 @@ export default function DownloadPanel() {
           disabled={downloadingProject}
           variant="secondary"
           size="lg"
-          className="shrink-0 bg-gray-900 hover:bg-gray-700 text-white rounded-xl"
+          className="shrink-0 bg-[#00B3B0] hover:bg-[#009E9B] text-white rounded-xl"
         >
           <span>{downloadingProject ? '⏳' : '↓'}</span>
           {downloadingProject ? 'Zipping… please wait' : 'Download ZIP'}
@@ -212,7 +212,7 @@ export default function DownloadPanel() {
             <div key={step.number} className="border border-gray-200 rounded-xl overflow-hidden">
               {/* Step header */}
               <div className="flex items-center gap-3 px-5 py-4 bg-white">
-                <span className="shrink-0 w-8 h-8 rounded-full bg-gray-900 text-white text-xs font-bold flex items-center justify-center">
+                <span className="shrink-0 w-8 h-8 rounded-full bg-[#00B3B0] text-white text-xs font-bold flex items-center justify-center">
                   {step.number}
                 </span>
                 <span className="text-base">{step.icon}</span>

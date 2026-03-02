@@ -1,7 +1,7 @@
 
-import SurveyBulkManager from '@/components/app/SurveyBulkManager'
 import AddOrGenerateSurveyDialog from '@/components/app/AddOrGenerateSurveyDialog'
 import ProjectActions from '@/components/app/ProjectManagementControls'
+import SurveyBulkManager from '@/components/app/SurveyBulkManager'
 import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
 import type { Database } from '@/types/DatabaseSchemaDefinitions'
 import Link from 'next/link'
@@ -79,17 +79,16 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             {surveyWithScoreRun && (
               <Link
                 href={`/app/projects/${project.id}/dashboard?surveyId=${surveyWithScoreRun.survey.id}`}
-                className="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-4 py-1.5 bg-[#009E9B] text-white text-sm font-medium rounded-lg hover:bg-[#00B3B0] transition-colors"
               >
                 Decision Dashboard
               </Link>
             )}
-            <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${
-              project.status === 'active' ? 'bg-green-100 text-green-700' :
-              project.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-              project.status === 'archived' ? 'bg-gray-200 text-gray-600' :
-              'bg-yellow-100 text-yellow-700'
-            }`}>
+            <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${project.status === 'active' ? 'bg-green-100 text-green-700' :
+                project.status === 'completed' ? 'bg-[#009E9B]/10 text-[#007A78]' :
+                  project.status === 'archived' ? 'bg-gray-200 text-gray-600' :
+                    'bg-yellow-100 text-yellow-700'
+              }`}>
               {project.status}
             </span>
           </div>
@@ -162,7 +161,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <dd className="text-gray-700 font-medium">{surveys.length}</dd>
               </div>
             </dl>
-            
+
             {/* Project Actions */}
             <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
               <ProjectActions project={project} surveyCount={surveys.length} />
@@ -208,31 +207,31 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           ) : (
             /* No surveys yet — hide selector when archived */
             project.status !== 'archived' ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-8">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <span className="text-3xl">📋</span>
+              <div className="bg-white rounded-xl border border-gray-200 p-8">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-[#009E9B]/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <span className="text-3xl">📋</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">No Surveys Yet</h3>
+                  <p className="text-sm text-gray-500">{isAdmin ? 'Choose a method below to create your first survey' : 'No surveys have been created for this project yet.'}</p>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">No Surveys Yet</h3>
-                <p className="text-sm text-gray-500">{isAdmin ? 'Choose a method below to create your first survey' : 'No surveys have been created for this project yet.'}</p>
-              </div>
 
-              {isAdmin && (
-                <AddOrGenerateSurveyDialog
-                  projectId={project.id}
-                  projectName={project.client_name}
-                  projectContext={{
-                    industry: project.industry ?? null,
-                    goal: project.goal ?? null,
-                    stage: project.stage ?? null,
-                    channels: project.channels ?? null,
-                    target_audience: project.target_audience ?? null,
-                  }}
-                  packs={packs}
-                  existingPackIds={[]}
-                />
-              )}
-            </div>
+                {isAdmin && (
+                  <AddOrGenerateSurveyDialog
+                    projectId={project.id}
+                    projectName={project.client_name}
+                    projectContext={{
+                      industry: project.industry ?? null,
+                      goal: project.goal ?? null,
+                      stage: project.stage ?? null,
+                      channels: project.channels ?? null,
+                      target_audience: project.target_audience ?? null,
+                    }}
+                    packs={packs}
+                    existingPackIds={[]}
+                  />
+                )}
+              </div>
             ) : (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
                 <span className="text-3xl block mb-2">🗄</span>
