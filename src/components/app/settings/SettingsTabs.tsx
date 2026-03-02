@@ -35,8 +35,8 @@ export default function SettingsTabs({ brandingTab, usersTab, activityTab, notif
             onClick={() => setActive(tab.id)}
             variant="ghost"
             className={`relative px-4 py-2.5 rounded-none transition-colors ${active === tab.id
-                ? 'text-violet-600 border-b-2 border-violet-600 -mb-px'
-                : 'text-gray-500 hover:text-gray-700'
+              ? 'text-[#00B3B0] border-b-2 border-[#00B3B0] -mb-px'
+              : 'text-gray-500 hover:text-gray-700'
               }`}
           >
             {tab.label}

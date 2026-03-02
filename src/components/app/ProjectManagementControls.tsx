@@ -27,7 +27,8 @@ export default function ProjectActions({ project, surveyCount }: Props) {
         {canEdit && (
           <Button
             onClick={() => setIsEditOpen(true)}
-            className="rounded-lg"
+            variant="outline"
+            className="rounded-lg text-gray-600 border-gray-300 hover:bg-gray-50 hover:text-gray-800"
           >
             Edit Project
           </Button>

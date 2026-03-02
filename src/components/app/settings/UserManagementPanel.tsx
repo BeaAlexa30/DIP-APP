@@ -54,7 +54,7 @@ function CreateAccountForm({ onCreated }: { onCreated: () => void }) {
     return (
       <Button
         onClick={() => setOpen(true)}
-        className="bg-violet-600 hover:bg-violet-500 rounded-lg"
+        className="bg-[#00B3B0] hover:bg-[#009E9B] rounded-lg"
       >
         + Create Analyst Account
       </Button>
@@ -71,19 +71,19 @@ function CreateAccountForm({ onCreated }: { onCreated: () => void }) {
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
           <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00B3B0]"
             placeholder="Jane Doe" />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
           <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00B3B0]"
             placeholder="analyst@company.com" />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Temporary Password</label>
           <input type="password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00B3B0]"
             placeholder="Min. 8 characters" />
         </div>
         {msg && (
@@ -93,7 +93,7 @@ function CreateAccountForm({ onCreated }: { onCreated: () => void }) {
         )}
         <div className="flex gap-2 pt-1">
           <Button type="submit" disabled={saving}
-            className="bg-violet-600 hover:bg-violet-500 rounded-lg">
+            className="bg-[#00B3B0] hover:bg-[#009E9B] rounded-lg">
             {saving ? 'Creating…' : 'Create Account'}
           </Button>
           <Button type="button" onClick={() => { setOpen(false); setMsg(null) }}
@@ -131,11 +131,11 @@ function EditNameForm({ user, onDone }: { user: User; onDone: (updated?: string)
     <form onSubmit={handleSave} className="flex items-center gap-2 min-w-0">
       <input
         type="text" value={name} onChange={e => setName(e.target.value)} autoFocus
-        className="w-36 px-2 py-1 border border-violet-300 rounded-md text-xs text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-violet-500"
+        className="w-36 px-2 py-1 border border-[#00B3B0] rounded-md text-xs text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#00B3B0]"
       />
       <Button type="submit" disabled={saving}
         size="xs"
-        className="bg-violet-600 hover:bg-violet-500 rounded-md whitespace-nowrap">
+        className="bg-[#00B3B0] hover:bg-[#009E9B] rounded-md whitespace-nowrap">
         {saving ? '…' : 'Save'}
       </Button>
       <Button type="button" onClick={() => onDone()}
@@ -237,7 +237,7 @@ export default function UserManagementPanel() {
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-violet-600" />
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#00B3B0]" />
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -334,7 +334,7 @@ export default function UserManagementPanel() {
                             <Button onClick={() => { setEditingId(user.id); setDeletingId(null) }}
                               variant="outline"
                               size="xs"
-                              className="text-gray-500 hover:text-violet-700 hover:border-violet-300 rounded-lg whitespace-nowrap">
+                              className="text-gray-500 hover:text-[#00B3B0] hover:border-[#00B3B0] rounded-lg whitespace-nowrap">
                               Edit
                             </Button>
                           )}

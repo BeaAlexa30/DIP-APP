@@ -5,6 +5,7 @@ import type { UserProfile } from '@/lib/auth/UserPermissionDefinitions';
 import { ROLE_LABELS } from '@/lib/auth/UserPermissionDefinitions';
 import type { AppSettings } from '@/lib/settings/AppSettingsLoader';
 import { createClient } from '@/lib/supabase/DatabaseClientManager';
+import { Blocks, Folder, LayoutDashboard, LogOut, PanelRightClose, PanelRightOpen, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -15,9 +16,9 @@ const ROLE_BADGE_COLORS: Record<string, string> = {
 }
 
 const BASE_NAV_ITEMS = [
-  { href: '/app', label: 'Dashboard', icon: '⬜' },
-  { href: '/app/projects', label: 'Projects', icon: '📁' },
-  { href: '/app/frameworks', label: 'Frameworks', icon: '🧩' },
+  { href: '/app', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+  { href: '/app/projects', label: 'Projects', icon: <Folder className="w-5 h-5" /> },
+  { href: '/app/frameworks', label: 'Frameworks', icon: <Blocks className="w-5 h-5" /> },
 ]
 
 export default function Sidebar({ profile, settings }: { profile: UserProfile | null; settings?: AppSettings | null }) {
@@ -25,23 +26,33 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
   const [isCollapsed, setIsCollapsed] = useState(false) // Desktop collapse
   const [currentTime, setCurrentTime] = useState(new Date())
   const [pendingCount, setPendingCount] = useState(0)
+  const [logoSrc, setLogoSrc] = useState(settings?.logo_url ?? '/images/PlatformBrandingLogo.png')
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
 
   const navItems = [
     ...BASE_NAV_ITEMS,
-    ...(profile?.role === 'admin' ? [{ href: '/app/settings', label: 'Settings', icon: '⚙️' }] : []),
+    ...(profile?.role === 'admin' ? [{ href: '/app/settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> }] : []),
   ]
 
   const companyName = settings?.company_name ?? 'Decision Intel'
-  const logoSrc = settings?.logo_url ?? '/images/PlatformBrandingLogo.png'
   const primaryColor = settings?.primary_color ?? '#2563eb'
 
   // Update time every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
+  }, [])
+
+  // Live-fetch logo so it reflects updates without a full server reload
+  useEffect(() => {
+    fetch('/api/settings/logo')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { logo_url: string | null } | null) => {
+        if (data?.logo_url) setLogoSrc(data.logo_url)
+      })
+      .catch(() => { })
   }, [])
 
   // Fetch pending approval count for admin notification badge
@@ -116,7 +127,7 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
                 className="text-gray-400 hover:text-gray-600"
                 title="Expand sidebar"
               >
-                »
+                <PanelRightOpen className="w-5 h-5" />
               </Button>
             </>
           ) : (
@@ -138,30 +149,15 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
                 className="text-gray-400 hover:text-gray-600"
                 title="Collapse sidebar"
               >
-                «
+                <PanelRightClose className="w-5 h-5" />
               </Button>
-            </>
-          )}
-        </div>
-
-        {/* Date and Time */}
-        <div className="px-5 py-4 border-b border-gray-100 text-center">
-          {isCollapsed ? (
-            <div className="text-sm text-gray-500">
-              <div className="font-medium text-base">{currentTime.getDate()}</div>
-              <div className="text-xs">{currentTime.toLocaleDateString('en-US', { month: 'short' })}</div>
-            </div>
-          ) : (
-            <>
-              <p className="text-sm font-semibold text-gray-700">{formatDate(currentTime)}</p>
-              <p className="text-sm text-gray-500 mt-1">{formatTime(currentTime)}</p>
             </>
           )}
         </div>
 
         {/* Menu Header */}
         <div className="px-4 pt-6 pb-3">
-          <h3 className={`text-sm font-semibold text-gray-400 uppercase tracking-wider ${isCollapsed ? 'text-center' : 'px-3'}`}>
+          <h3 className={`text-xs text-gray-400 tracking-wider ${isCollapsed ? 'text-center' : 'px-3'}`}>
             {isCollapsed ? '☰' : 'Menu'}
           </h3>
         </div>
@@ -218,7 +214,7 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
                 className="text-gray-300 hover:text-gray-500"
                 title="Sign out"
               >
-                ↩
+                <LogOut className="w-5 h-5" />
               </Button>
             </div>
           ) : (
@@ -241,7 +237,7 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
                 className="text-gray-300 hover:text-gray-500 shrink-0"
                 title="Sign out"
               >
-                ↩
+                <LogOut className="w-5 h-5" />
               </Button>
             </div>
           )}

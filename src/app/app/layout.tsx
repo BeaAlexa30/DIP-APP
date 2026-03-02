@@ -1,10 +1,11 @@
-import { redirect } from 'next/navigation'
-import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
+import ChangePasswordModal from '@/components/app/ChangePasswordModal'
+import DynamicFavicon from '@/components/app/DynamicFavicon'
 import Sidebar from '@/components/app/NavigationSidebar'
 import { ProfileProvider } from '@/components/app/UserProfileProvider'
-import ChangePasswordModal from '@/components/app/ChangePasswordModal'
 import type { UserProfile } from '@/lib/auth/UserPermissionDefinitions'
 import { getAppSettings } from '@/lib/settings/AppSettingsLoader'
+import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
+import { redirect } from 'next/navigation'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -62,6 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-gray-950 text-white overflow-hidden">
+      <DynamicFavicon />
       <Sidebar profile={userProfile} settings={settings} />
       <ProfileProvider profile={userProfile}>
         <main className="flex-1 overflow-auto bg-gray-50 text-gray-900 flex flex-col">
