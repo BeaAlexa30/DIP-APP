@@ -66,8 +66,8 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Failed to create shareable link' }, { status: 500 })
   }
 
-  // Generate the shareable URL using the actual request origin so it works correctly on any deployment
-  const baseUrl = req.nextUrl.origin
+  // Use NEXT_PUBLIC_APP_URL (production URL) if set, otherwise fall back to request origin
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || req.nextUrl.origin
   const shareUrl = `${baseUrl}/share/report/${token}`
 
   getUserInfo(authResult.userId).then(u =>
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: 'Failed to fetch shareable links' }, { status: 500 })
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || req.nextUrl.origin
   const sharesWithUrls = (shares ?? []).map((share: any) => ({
     id: share.id,
     token: share.token,
