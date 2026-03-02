@@ -284,30 +284,39 @@ export function generatePDFReport(data: ReportData): Blob {
   divider()
 
   // ─── AI Insights (clearly labeled) ──────────────────────────
-  if (data.aiInsightSummary || (data.aiThemes && data.aiThemes.length > 0)) {
-    checkPage(50)
-
+  if (data.aiInsightSummary || (data.aiThemes && data.aiThemes.length > 0) || data.fullAnalysis) {
     // Strip everything outside printable 7-bit ASCII — jsPDF Latin-1 codec
     // corrupts any multi-byte UTF-8 chars (bullets, em-dashes, curly quotes etc.)
     const sanitize = (s: string) =>
       s.replace(/[^\x20-\x7E]/g, ' ').replace(/\s{2,}/g, ' ').trim()
 
-    // Explicitly reset font to normal BEFORE drawing anything in this section
-    // (autoTable above may leave bold state that corrupts next text draw)
+    // ── Start new page for AI Insights section ──
+    doc.addPage()
+    y = 20
+
+    // Section header banner
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(13)
+    doc.setFontSize(14)
     doc.setTextColor(91, 33, 182)
     doc.setFillColor(237, 233, 254)
-    doc.rect(margin, y, 182, 11, 'F')
-    doc.text('AI-Generated Insights', margin + 4, y + 7.5)
-    y += 15
+    doc.rect(margin, y, 182, 13, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.text('AI-Generated Insights', margin + 4, y + 9)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(140, 100, 200)
+    doc.text('Non-Scoring', margin + 80, y + 9)
+    y += 17
 
     // Disclaimer
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(120, 53, 165)
-    doc.text('Note: AI-generated content for reference only. Does not affect scoring.', margin, y)
-    y += 8
+    doc.text('AI-generated content for reference only. Does not affect scoring.', margin, y)
+    y += 4
+    doc.setTextColor(140, 100, 200)
+    doc.text('5-Dimensional Analysis: Descriptive - Diagnostic - Predictive - Prescriptive - KPI', margin, y)
+    y += 10
 
     // Summary box
     if (data.aiInsightSummary) {
@@ -316,10 +325,10 @@ export function generatePDFReport(data: ReportData): Blob {
       doc.setFontSize(9)
       doc.setTextColor(55, 20, 100)
 
-      const lines = doc.splitTextToSize(cleanSummary, 172) as string[]
-      const lineH = 5.5
-      const padTop = 6
-      const padBot = 6
+      const lines = doc.splitTextToSize(cleanSummary, 170) as string[]
+      const lineH = 5
+      const padTop = 5
+      const padBot = 5
       const boxH = padTop + lines.length * lineH + padBot
 
       checkPage(boxH + 8)
@@ -335,36 +344,378 @@ export function generatePDFReport(data: ReportData): Blob {
         doc.text(lines[i], margin + 5, y + padTop + i * lineH + 4)
       }
 
-      y += boxH + 8
+      y += boxH + 6
     }
 
     // Themes
     if (data.aiThemes && data.aiThemes.length > 0) {
       checkPage(20)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
       doc.setTextColor(91, 33, 182)
       doc.text('Key Themes:', margin, y)
-      y += 7
+      y += 6
 
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
+      doc.setFontSize(8.5)
       doc.setTextColor(60, 60, 60)
 
       for (const theme of data.aiThemes) {
         const cleanTheme = sanitize(theme)
         if (!cleanTheme) continue
-        const tLines = doc.splitTextToSize('- ' + cleanTheme, 172) as string[]
-        checkPage(tLines.length * 5.5 + 4)
+        const tLines = doc.splitTextToSize('- ' + cleanTheme, 170) as string[]
+        checkPage(tLines.length * 5 + 3)
         for (let i = 0; i < tLines.length; i++) {
-          doc.text(tLines[i], margin + 3, y + i * 5.5)
+          doc.text(tLines[i], margin + 3, y + i * 5)
         }
-        y += tLines.length * 5.5 + 3
+        y += tLines.length * 5 + 2
       }
-      y += 2
+      y += 4
     }
 
     divider([196, 160, 250])
+
+    // ── 5-Dimensional Analysis ──────────────────────────────────
+    const fa = data.fullAnalysis
+    if (fa) {
+      // Helper for dimension section headers
+      const dimHeader = (icon: string, title: string, subtitle: string) => {
+        checkPage(40)
+        doc.setFillColor(245, 240, 255)
+        doc.rect(margin, y, 182, 16, 'F')
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(11)
+        doc.setTextColor(75, 25, 160)
+        doc.text(`${icon}  ${title}`, margin + 3, y + 7)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7.5)
+        doc.setTextColor(140, 110, 190)
+        doc.text(subtitle, margin + 3, y + 13)
+        y += 20
+      }
+
+      // Helper for bullet lists
+      const bulletList = (items: string[], bulletChar = '-', color: [number, number, number] = [60, 60, 60]) => {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8.5)
+        doc.setTextColor(...color)
+        for (const item of items) {
+          const clean = sanitize(item)
+          if (!clean) continue
+          const lines = doc.splitTextToSize(`${bulletChar} ${clean}`, 168) as string[]
+          checkPage(lines.length * 4.5 + 3)
+          for (let i = 0; i < lines.length; i++) {
+            doc.text(lines[i], margin + 4, y + i * 4.5)
+          }
+          y += lines.length * 4.5 + 1.5
+        }
+      }
+
+      // Helper for stat box
+      const statBox = (label: string, value: string, x: number, w: number) => {
+        doc.setFillColor(255, 255, 255)
+        doc.setDrawColor(210, 200, 230)
+        doc.setLineWidth(0.3)
+        doc.rect(x, y, w, 16, 'FD')
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7)
+        doc.setTextColor(130, 130, 130)
+        doc.text(label, x + 3, y + 5.5)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(10)
+        doc.setTextColor(75, 25, 160)
+        doc.text(sanitize(value), x + 3, y + 13)
+        doc.setLineWidth(0.2)
+      }
+
+      const sectionLabel = (text: string) => {
+        checkPage(12)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(100, 100, 100)
+        doc.text(text.toUpperCase(), margin, y)
+        y += 5
+      }
+
+      // ── 1. DESCRIPTIVE ────────────────────────────────────────
+      if (fa.descriptive) {
+        dimHeader('[1]', 'Descriptive Analysis', 'What happened?')
+
+        if (fa.descriptive.summary) {
+          addBody(sanitize(fa.descriptive.summary))
+          y += 2
+        }
+
+        // Stats grid
+        checkPage(24)
+        const colW = 44
+        const gapX = 2
+        statBox('Total Respondents', String(fa.descriptive.totalRespondents ?? '--'), margin, colW)
+        statBox('Avg Score', fa.descriptive.averageScore != null ? `${fa.descriptive.averageScore}/100` : '--', margin + colW + gapX, colW)
+        statBox('Top Performing', sanitize(fa.descriptive.topPerformingArea ?? '--'), margin + (colW + gapX) * 2, colW)
+        statBox('Weakest Area', sanitize(fa.descriptive.weakestArea ?? '--'), margin + (colW + gapX) * 3, colW)
+        y += 20
+
+        if (fa.descriptive.responseRateNote) {
+          checkPage(10)
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(8)
+          doc.setTextColor(100, 100, 100)
+          doc.text(`Sample Confidence: ${sanitize(fa.descriptive.responseRateNote)}`, margin, y)
+          y += 6
+        }
+
+        if (fa.descriptive.highlights?.length) {
+          sectionLabel('Data Highlights')
+          bulletList(fa.descriptive.highlights, '>', [70, 50, 130])
+        }
+        y += 4
+        divider([220, 210, 240])
+      }
+
+      // ── 2. DIAGNOSTIC ─────────────────────────────────────────
+      if (fa.diagnostic) {
+        dimHeader('[2]', 'Diagnostic Analysis', 'Why did it happen?')
+
+        if (fa.diagnostic.summary) {
+          addBody(sanitize(fa.diagnostic.summary))
+          y += 2
+        }
+
+        if (fa.diagnostic.rootCauses?.length) {
+          sectionLabel('Root Causes')
+          bulletList(fa.diagnostic.rootCauses, '>', [180, 60, 60])
+        }
+
+        if (fa.diagnostic.frictionPoints?.length) {
+          sectionLabel('Friction Points')
+          bulletList(fa.diagnostic.frictionPoints, '!', [200, 140, 0])
+        }
+
+        if (fa.diagnostic.riskAreas?.length) {
+          sectionLabel('Risk Areas')
+          bulletList(fa.diagnostic.riskAreas, '*', [220, 100, 30])
+        }
+
+        if (fa.diagnostic.segmentInsights?.length) {
+          sectionLabel('Segment Insights')
+          bulletList(fa.diagnostic.segmentInsights, '-', [60, 90, 160])
+        }
+        y += 4
+        divider([220, 210, 240])
+      }
+
+      // ── 3. PREDICTIVE ─────────────────────────────────────────
+      if (fa.predictive) {
+        dimHeader('[3]', 'Predictive Analysis', 'What might happen?')
+
+        if (fa.predictive.summary) {
+          addBody(sanitize(fa.predictive.summary))
+          y += 2
+        }
+
+        // Trend + Risk indicators
+        checkPage(22)
+        if (fa.predictive.trendOutlook || fa.predictive.riskLevel) {
+          const trendLabels: Record<string, string> = { improving: 'Improving ^', stable: 'Stable ->', declining: 'Declining v' }
+          const riskLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' }
+          const trendColors: Record<string, [number, number, number]> = { improving: [34, 160, 80], stable: [120, 120, 120], declining: [220, 50, 50] }
+          const riskColors: Record<string, [number, number, number]> = { low: [34, 160, 80], medium: [200, 160, 0], high: [220, 130, 30], critical: [220, 40, 40] }
+
+          if (fa.predictive.trendOutlook) {
+            statBox('Trend Outlook', trendLabels[fa.predictive.trendOutlook] ?? fa.predictive.trendOutlook, margin, 60)
+            // Override color for the trend value
+            const tc = trendColors[fa.predictive.trendOutlook] ?? [75, 25, 160]
+            doc.setTextColor(...tc)
+            doc.setFont('helvetica', 'bold')
+            doc.setFontSize(10)
+            doc.text(trendLabels[fa.predictive.trendOutlook] ?? fa.predictive.trendOutlook, margin + 3, y + 13)
+          }
+          if (fa.predictive.riskLevel) {
+            const riskX = fa.predictive.trendOutlook ? margin + 64 : margin
+            statBox('Risk Level', riskLabels[fa.predictive.riskLevel] ?? fa.predictive.riskLevel, riskX, 60)
+            const rc = riskColors[fa.predictive.riskLevel] ?? [75, 25, 160]
+            doc.setTextColor(...rc)
+            doc.setFont('helvetica', 'bold')
+            doc.setFontSize(10)
+            doc.text(riskLabels[fa.predictive.riskLevel] ?? fa.predictive.riskLevel, riskX + 3, y + 13)
+          }
+          y += 20
+        }
+
+        if (fa.predictive.churnSignals?.length) {
+          sectionLabel('Churn / Retention Signals')
+          bulletList(fa.predictive.churnSignals, '!', [200, 60, 60])
+        }
+
+        if (fa.predictive.forecastNotes?.length) {
+          sectionLabel('Forecast Notes')
+          bulletList(fa.predictive.forecastNotes, '>', [60, 100, 180])
+        }
+        y += 4
+        divider([220, 210, 240])
+      }
+
+      // ── 4. PRESCRIPTIVE ───────────────────────────────────────
+      if (fa.prescriptive) {
+        dimHeader('[4]', 'Prescriptive Analysis', 'What should we do?')
+
+        if (fa.prescriptive.summary) {
+          addBody(sanitize(fa.prescriptive.summary))
+          y += 2
+        }
+
+        if (fa.prescriptive.actionPlan?.length) {
+          sectionLabel('Action Plan')
+          autoTable(doc, {
+            startY: y,
+            head: [['Priority', 'Action', 'Timeline', 'Owner', 'Impact']],
+            body: fa.prescriptive.actionPlan.map((item: { priority: string; action: string; timeline: string; owner: string; impact: string }) => [
+              (item.priority ?? '').toUpperCase(),
+              sanitize(item.action ?? ''),
+              sanitize(item.timeline ?? ''),
+              sanitize(item.owner ?? ''),
+              sanitize(item.impact ?? ''),
+            ]),
+            styles: { fontSize: 7.5, cellPadding: 3 },
+            headStyles: { fillColor: [91, 33, 182], textColor: 255, fontSize: 7.5 },
+            alternateRowStyles: { fillColor: [250, 245, 255] },
+            columnStyles: {
+              0: { cellWidth: 18, fontStyle: 'bold' },
+              1: { cellWidth: 55 },
+              2: { cellWidth: 28 },
+              3: { cellWidth: 28 },
+              4: { cellWidth: 46 },
+            },
+            margin: { left: margin, right: margin },
+          })
+          y = doc.lastAutoTable.finalY + 8
+        }
+
+        if (fa.prescriptive.topImprovements?.length) {
+          sectionLabel('Top Improvements')
+          bulletList(fa.prescriptive.topImprovements, '>', [34, 160, 80])
+        }
+
+        if (fa.prescriptive.successMetrics?.length) {
+          sectionLabel('Success Metrics')
+          bulletList(fa.prescriptive.successMetrics, '*', [34, 160, 80])
+        }
+        y += 4
+        divider([220, 210, 240])
+      }
+
+      // ── 5. KPI VIEW ───────────────────────────────────────────
+      if (fa.kpi) {
+        dimHeader('[5]', 'KPI Dashboard View', 'Executive Summary')
+
+        if (fa.kpi.executiveSummary) {
+          addBody(sanitize(fa.kpi.executiveSummary))
+          y += 2
+        }
+
+        // KPI stat boxes
+        checkPage(24)
+        const kpiColW = 44
+        const kpiGap = 2
+
+        // Health Score
+        const healthVal = fa.kpi.overallHealth != null ? fa.kpi.overallHealth.toFixed(0) : '--'
+        statBox('Health Score', healthVal, margin, kpiColW)
+        // Color override for health
+        if (fa.kpi.overallHealth != null) {
+          const hc: [number, number, number] = fa.kpi.overallHealth >= 70 ? [34, 160, 80] : fa.kpi.overallHealth >= 50 ? [200, 160, 0] : [220, 40, 40]
+          doc.setTextColor(...hc)
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(10)
+          doc.text(healthVal, margin + 3, y + 13)
+        }
+
+        // Meeting Goal
+        statBox('Meeting Goal?', fa.kpi.meetsGoal ? 'Yes' : 'Not yet', margin + kpiColW + kpiGap, kpiColW)
+        const goalColor: [number, number, number] = fa.kpi.meetsGoal ? [34, 160, 80] : [220, 40, 40]
+        doc.setTextColor(...goalColor)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(10)
+        doc.text(fa.kpi.meetsGoal ? 'Yes' : 'Not yet', margin + kpiColW + kpiGap + 3, y + 13)
+
+        // Trend
+        const trendVal = fa.kpi.trend ? fa.kpi.trend.charAt(0).toUpperCase() + fa.kpi.trend.slice(1) : '--'
+        statBox('Trend', trendVal, margin + (kpiColW + kpiGap) * 2, kpiColW)
+
+        // Top Impact Area
+        statBox('Top Impact', sanitize(fa.kpi.topImpactArea ?? '--'), margin + (kpiColW + kpiGap) * 3, kpiColW)
+        y += 22
+
+        // Urgent attention & benchmark
+        if (fa.kpi.urgentAttention || fa.kpi.performanceVsBenchmark) {
+          checkPage(30)
+          if (fa.kpi.urgentAttention) {
+            doc.setFillColor(255, 245, 245)
+            doc.setDrawColor(250, 200, 200)
+            doc.setLineWidth(0.3)
+            const urgText = sanitize(fa.kpi.urgentAttention)
+            const urgLines = doc.splitTextToSize(urgText, 80) as string[]
+            const urgH = 8 + urgLines.length * 4.5
+            doc.rect(margin, y, 88, urgH, 'FD')
+            doc.setFont('helvetica', 'bold')
+            doc.setFontSize(7)
+            doc.setTextColor(180, 40, 40)
+            doc.text('URGENT ATTENTION', margin + 3, y + 5.5)
+            doc.setFont('helvetica', 'normal')
+            doc.setFontSize(8)
+            doc.setTextColor(140, 40, 40)
+            for (let i = 0; i < urgLines.length; i++) {
+              doc.text(urgLines[i], margin + 3, y + 10 + i * 4.5)
+            }
+
+            if (fa.kpi.performanceVsBenchmark) {
+              doc.setFillColor(245, 255, 245)
+              doc.setDrawColor(200, 240, 200)
+              const benchText = sanitize(fa.kpi.performanceVsBenchmark)
+              const benchLines = doc.splitTextToSize(benchText, 80) as string[]
+              const benchH = 8 + benchLines.length * 4.5
+              doc.rect(margin + 92, y, 90, Math.max(urgH, benchH), 'FD')
+              doc.setFont('helvetica', 'bold')
+              doc.setFontSize(7)
+              doc.setTextColor(30, 130, 60)
+              doc.text('VS BENCHMARK', margin + 95, y + 5.5)
+              doc.setFont('helvetica', 'normal')
+              doc.setFontSize(8)
+              doc.setTextColor(40, 120, 60)
+              for (let i = 0; i < benchLines.length; i++) {
+                doc.text(benchLines[i], margin + 95, y + 10 + i * 4.5)
+              }
+              y += Math.max(urgH, benchH) + 6
+            } else {
+              y += urgH + 6
+            }
+          } else if (fa.kpi.performanceVsBenchmark) {
+            doc.setFillColor(245, 255, 245)
+            doc.setDrawColor(200, 240, 200)
+            doc.setLineWidth(0.3)
+            const benchText = sanitize(fa.kpi.performanceVsBenchmark)
+            const benchLines = doc.splitTextToSize(benchText, 168) as string[]
+            const benchH = 8 + benchLines.length * 4.5
+            doc.rect(margin, y, 182, benchH, 'FD')
+            doc.setFont('helvetica', 'bold')
+            doc.setFontSize(7)
+            doc.setTextColor(30, 130, 60)
+            doc.text('VS BENCHMARK', margin + 3, y + 5.5)
+            doc.setFont('helvetica', 'normal')
+            doc.setFontSize(8)
+            doc.setTextColor(40, 120, 60)
+            for (let i = 0; i < benchLines.length; i++) {
+              doc.text(benchLines[i], margin + 3, y + 10 + i * 4.5)
+            }
+            y += benchH + 6
+          }
+          doc.setLineWidth(0.2)
+        }
+        y += 4
+        divider([220, 210, 240])
+      }
+    }
   }
 
   // ─── Recommended Next Actions ────────────────────────────────
@@ -391,7 +742,7 @@ export function generatePDFReport(data: ReportData): Blob {
   addSubtitle(`Score Run ID: ${data.scoring.scoreRunId}`)
   addSubtitle(`Checksum (SHA-256): ${data.scoring.checksum}`)
   addSubtitle(`Framework Version: ${data.scoring.frameworkVersion}`)
-  addSubtitle(`Executed: ${data.scoring.executedAt.toISOString()}`)
+  addSubtitle(`Executed: ${data.scoring.executedAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} at ${data.scoring.executedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`)
   addSubtitle(`Responses Scored: ${data.scoring.responseCount}`)
 
   // ─── Footer on each page ─────────────────────────────────────

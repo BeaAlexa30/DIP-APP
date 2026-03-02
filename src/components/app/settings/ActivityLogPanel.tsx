@@ -134,6 +134,9 @@ export default function ActivityLogPanel() {
   const [filterAction, setFilterAction] = useState('')
   const [filterUser, setFilterUser] = useState('')
   const [pendingUser, setPendingUser] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
+  const [confirmModal, setConfirmModal] = useState<{ ids: string[]; message: string } | null>(null)
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -146,6 +149,7 @@ export default function ActivityLogPanel() {
       const data = await res.json()
       setLogs(data.logs)
       setTotal(data.total)
+      setSelected(new Set()) // clear selection on page/filter change
     } catch {
       // silent
     } finally {
@@ -156,6 +160,59 @@ export default function ActivityLogPanel() {
   useEffect(() => { fetchLogs() }, [fetchLogs])
 
   const totalPages = Math.max(1, Math.ceil(total / 50))
+
+  // ── Selection helpers ──
+  const toggleOne = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (selected.size === logs.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(logs.map(l => l.id)))
+    }
+  }
+
+  // ── Delete handler ──
+  const performDelete = async (ids: string[]) => {
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/admin/activity', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      if (res.ok) {
+        await fetchLogs()
+      }
+    } catch {
+      // silent
+    } finally {
+      setDeleting(false)
+      setConfirmModal(null)
+    }
+  }
+
+  const confirmDeleteOne = (log: ActivityLog) => {
+    const label = ACTION_LABELS[log.action]?.label ?? log.action
+    setConfirmModal({
+      ids: [log.id],
+      message: `Are you sure you want to permanently delete this activity log?\n\n• ${label} by ${log.user_email}\n• ${formatTime(log.created_at)}\n\nThis action cannot be undone.`,
+    })
+  }
+
+  const confirmDeleteSelected = () => {
+    setConfirmModal({
+      ids: Array.from(selected),
+      message: `Are you sure you want to permanently delete ${selected.size} selected activity log${selected.size > 1 ? 's' : ''}?\n\nThis action cannot be undone.`,
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -205,28 +262,70 @@ export default function ActivityLogPanel() {
         <span className="ml-auto text-xs text-gray-400 self-center">{total} record{total !== 1 ? 's' : ''}</span>
       </div>
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <span className="text-sm font-medium text-red-800">
+            {selected.size} selected
+          </span>
+          <button
+            onClick={confirmDeleteSelected}
+            disabled={deleting}
+            className="ml-auto bg-red-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+          >
+            {deleting ? 'Deleting…' : `Delete ${selected.size} Selected`}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-sm text-red-600 hover:text-red-800 font-medium"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-3 py-3 text-left w-10">
+                <input
+                  type="checkbox"
+                  checked={logs.length > 0 && selected.size === logs.length}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 cursor-pointer"
+                />
+              </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">User</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Action</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Details</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Time</th>
+              <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Delete</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-400 text-sm">Loading…</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">Loading…</td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-400 text-sm">No activity recorded yet.</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">No activity recorded yet.</td>
               </tr>
             ) : logs.map(log => (
-              <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+              <tr
+                key={log.id}
+                className={`transition-colors ${selected.has(log.id) ? 'bg-red-50/50' : 'hover:bg-gray-50'}`}
+              >
+                <td className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(log.id)}
+                    onChange={() => toggleOne(log.id)}
+                    className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 cursor-pointer"
+                  />
+                </td>
                 <td className="px-4 py-3">
                   <div className="font-medium text-gray-900">{log.user_name ?? '—'}</div>
                   <div className="text-xs text-gray-400">{log.user_email}</div>
@@ -238,6 +337,15 @@ export default function ActivityLogPanel() {
                   {formatDetails(log.action, log.details)}
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{formatTime(log.created_at)}</td>
+                <td className="px-3 py-3 text-center">
+                  <button
+                    onClick={() => confirmDeleteOne(log)}
+                    disabled={deleting}
+                    className="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 rounded-lg whitespace-nowrap disabled:opacity-40 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -262,6 +370,43 @@ export default function ActivityLogPanel() {
           >
             Next →
           </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Confirm Permanent Deletion</h3>
+              </div>
+              <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">
+                {confirmModal.message}
+              </p>
+            </div>
+            <div className="border-t border-gray-200 px-6 py-4 flex justify-end gap-3 bg-gray-50 rounded-b-2xl">
+              <button
+                onClick={() => setConfirmModal(null)}
+                disabled={deleting}
+                className="text-sm font-medium text-gray-700 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => performDelete(confirmModal.ids)}
+                disabled={deleting}
+                className="text-sm font-medium text-white bg-red-600 px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deleting ? 'Deleting…' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
