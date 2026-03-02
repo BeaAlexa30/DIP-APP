@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { useRouter } from 'next/navigation'
+import { useMemo, useState } from 'react'
 
 type SortKey = 'name' | 'version' | 'status' | 'created_at'
 type SortDir = 'asc' | 'desc'
@@ -27,12 +29,12 @@ interface Column {
 }
 
 const ALL_COLUMNS: Column[] = [
-  { key: 'name',        label: 'Name' },
-  { key: 'version',     label: 'Version' },
+  { key: 'name', label: 'Name' },
+  { key: 'version', label: 'Version' },
   { key: 'description', label: 'Description' },
-  { key: 'status',      label: 'Status' },
-  { key: 'projects',    label: 'Projects' },
-  { key: 'created_at',  label: 'Created' },
+  { key: 'status', label: 'Status' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'created_at', label: 'Created' },
 ]
 
 interface Props {
@@ -58,10 +60,10 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [search, setSearch]               = useState('')
-  const [filterStatus, setFilterStatus]   = useState('')
-  const [sortKey, setSortKey]             = useState<SortKey>('created_at')
-  const [sortDir, setSortDir]             = useState<SortDir>('desc')
+  const [search, setSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('created_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(ALL_COLUMNS.map((c) => c.key))
   )
@@ -130,7 +132,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
       )
     }
 
-    if (filterStatus === 'active')   result = result.filter((p) => activeMap[p.id] ?? p.active)
+    if (filterStatus === 'active') result = result.filter((p) => activeMap[p.id] ?? p.active)
     if (filterStatus === 'inactive') result = result.filter((p) => !(activeMap[p.id] ?? p.active))
 
     result.sort((a, b) => {
@@ -174,7 +176,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
   }
 
   const shownColumns = ALL_COLUMNS.filter((c) => visibleColumns.has(c.key))
-  const hasFilters   = search || filterStatus
+  const hasFilters = search || filterStatus
 
   return (
     <>
@@ -237,20 +239,22 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-              <button
+              <Button
                 onClick={() => { setDeleteTarget(null); setDeleteConfirmInput(''); setDeleteError(null) }}
                 disabled={deleting}
-                className="text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg transition-colors"
+                variant="outline"
+                className="rounded-lg"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleDelete}
                 disabled={deleting || deleteConfirmInput !== deleteTarget.name}
-                className="text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 px-4 py-2 rounded-lg transition-colors"
+                variant="destructive"
+                className="rounded-lg"
               >
                 {deleting ? 'Deleting…' : 'Delete Permanently'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -338,21 +342,23 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
               className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600">✕</button>
+              <Button onClick={() => setSearch('')} variant="ghost" size="icon-sm" className="absolute inset-y-0 right-3">✕</Button>
             )}
           </div>
 
           {/* Column picker */}
           <div className="relative">
-            <button
+            <Button
               onClick={() => setShowColumnPicker((v) => !v)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 rounded-lg"
             >
               <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
               </svg>
               Columns
-            </button>
+            </Button>
             {showColumnPicker && (
               <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-44">
                 <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Visible Columns</p>
@@ -372,15 +378,17 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
           </div>
 
           {/* Print */}
-          <button
+          <Button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 rounded-lg"
           >
             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
             </svg>
             Print Report
-          </button>
+          </Button>
         </div>
 
         {/* Row 2: filters */}
@@ -396,12 +404,14 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
           </select>
 
           {hasFilters && (
-            <button
+            <Button
               onClick={() => { setSearch(''); setFilterStatus('') }}
-              className="text-sm text-red-500 hover:text-red-700 px-2 py-1 rounded transition-colors"
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-700"
             >
               Clear filters
-            </button>
+            </Button>
           )}
 
           <span className="ml-auto text-xs text-gray-400">
@@ -414,7 +424,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
       {toggleError && (
         <div className="no-print flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
           <span>⚠</span><span>{toggleError}</span>
-          <button onClick={() => setToggleError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+          <Button onClick={() => setToggleError(null)} variant="ghost" size="icon-xs" className="ml-auto text-red-400 hover:text-red-600">✕</Button>
         </div>
       )}
 
@@ -478,22 +488,17 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                   {visibleColumns.has('status') && (
                     <td className="px-6 py-4">
                       {canManage ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleToggle(pack.id) }}
+                        <Switch
+                          checked={activeMap[pack.id] ?? pack.active}
+                          onCheckedChange={() => handleToggle(pack.id)}
                           disabled={toggling[pack.id]}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none no-print ${
-                            (activeMap[pack.id] ?? pack.active) ? 'bg-green-500' : 'bg-gray-300'
-                          } disabled:opacity-50 cursor-pointer`}
+                          className="no-print"
                           title={(activeMap[pack.id] ?? pack.active) ? 'Click to deactivate' : 'Click to activate'}
-                        >
-                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                            (activeMap[pack.id] ?? pack.active) ? 'translate-x-6' : 'translate-x-1'
-                          }`} />
-                        </button>
+                          onClick={(e) => e.stopPropagation()}
+                        />
                       ) : (
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                          (activeMap[pack.id] ?? pack.active) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                        }`}>
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${(activeMap[pack.id] ?? pack.active) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                          }`}>
                           {(activeMap[pack.id] ?? pack.active) ? 'Active' : 'Inactive'}
                         </span>
                       )}
@@ -521,12 +526,14 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                   )}
                   {canManage && (
                     <td className="px-6 py-4 no-print">
-                      <button
+                      <Button
                         onClick={(e) => { e.stopPropagation(); setDeleteTarget(pack); setDeleteConfirmInput(''); setDeleteError(null) }}
-                        className="text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
+                        variant="outline"
+                        size="xs"
+                        className="text-red-600 hover:text-red-800 border-red-200 hover:border-red-400 hover:bg-red-50 rounded-lg"
                       >
                         Delete
-                      </button>
+                      </Button>
                     </td>
                   )}
                 </tr>
@@ -536,12 +543,13 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
         ) : (
           <div className="py-16 text-center text-gray-400">
             <p className="text-base mb-2">No framework packs match your filters</p>
-            <button
+            <Button
               onClick={() => { setSearch(''); setFilterStatus('') }}
-              className="text-sm text-purple-600 hover:underline"
+              variant="link"
+              className="text-purple-600"
             >
               Clear all filters
-            </button>
+            </Button>
           </div>
         )}
 

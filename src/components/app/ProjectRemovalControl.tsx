@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 
 interface Props {
   projectId: string
@@ -72,39 +73,34 @@ export default function ArchiveProjectButton({ projectId, projectName, currentSt
 
         {error && <p className="text-xs text-red-700 mb-3">{error}</p>}
         <div className="flex gap-2">
-          <button
+          <Button
             onClick={handleStatusChange}
             disabled={loading}
-            className={`px-3 py-1.5 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors ${
-              isArchived ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-600 hover:bg-amber-700'
-            }`}
+            className={`rounded-lg ${isArchived ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-600 hover:bg-amber-700'}`}
           >
             {loading
               ? (isArchived ? 'Reopening...' : 'Archiving...')
               : (isArchived ? 'Yes, Reopen Project' : 'Yes, Archive Project')}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setShowConfirm(false)}
             disabled={loading}
-            className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            variant="outline"
+            className="rounded-lg"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     )
   }
 
   return (
-    <button
+    <Button
       onClick={() => setShowConfirm(true)}
-      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-        isArchived
-          ? 'bg-green-600 text-white hover:bg-green-700'
-          : 'bg-amber-600 text-white hover:bg-amber-700'
-      }`}
+      className={`rounded-lg ${isArchived ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-600 hover:bg-amber-700'}`}
     >
       {isArchived ? '↻ Reopen Project' : '🗄 Archive Project'}
-    </button>
+    </Button>
   )
 }

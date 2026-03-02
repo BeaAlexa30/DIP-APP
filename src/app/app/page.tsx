@@ -1,10 +1,11 @@
-import { createClient } from '@/lib/supabase/ServerSideDbConnector'
-import { getCurrentProfile } from '@/lib/auth/UserProfileRetriever'
-import { can } from '@/lib/auth/UserPermissionDefinitions'
-import Link from 'next/link'
-import DashboardCharts from '@/components/dashboard/DashboardCharts'
 import DashboardAutoInsights from '@/components/dashboard/DashboardAutoInsights'
-import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns'
+import DashboardCharts from '@/components/dashboard/DashboardCharts'
+import { Button } from '@/components/ui/button'
+import { can } from '@/lib/auth/UserPermissionDefinitions'
+import { getCurrentProfile } from '@/lib/auth/UserProfileRetriever'
+import { createClient } from '@/lib/supabase/ServerSideDbConnector'
+import { endOfMonth, format, startOfMonth, subMonths } from 'date-fns'
+import Link from 'next/link'
 
 export default async function AppDashboard() {
   const supabase = await createClient()
@@ -49,23 +50,23 @@ export default async function AppDashboard() {
   const totalSurveys = allSurveyStatuses?.length ?? 0
 
   const stats = [
-    { label: 'Total Projects', value: totalProjects, href: '/app/projects', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-    { label: 'Active Surveys', value: activeSurveys, href: '/app/projects', color: 'bg-green-50 text-green-700 border-green-200' },
-    { label: 'Framework Packs', value: frameworkCount ?? 0, href: '/app/frameworks', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+    { label: 'Total Projects', value: totalProjects, href: '/app/projects', color: 'bg-[#e0f9f9] text-[#007775] border-[#80d9d8]' },
+    { label: 'Active Surveys', value: activeSurveys, href: '/app/projects', color: 'bg-[#ccf5f5] text-[#005f5e] border-[#59c9c8]' },
+    { label: 'Framework Packs', value: frameworkCount ?? 0, href: '/app/frameworks', color: 'bg-[#b3f0ef] text-[#004a49] border-[#33b8b7]' },
   ]
 
   // ── Chart data ────────────────────────────────────────────
   const projectsByStatus = [
-    { name: 'Active',    value: statusGroup['active']    ?? 0, color: '#22c55e' },
-    { name: 'Draft',     value: statusGroup['draft']     ?? 0, color: '#f59e0b' },
-    { name: 'Completed', value: statusGroup['completed'] ?? 0, color: '#3b82f6' },
-    { name: 'Archived',  value: statusGroup['archived']  ?? 0, color: '#9ca3af' },
+    { name: 'Active', value: statusGroup['active'] ?? 0, color: '#00B3B0' },
+    { name: 'Draft', value: statusGroup['draft'] ?? 0, color: '#111827' },
+    { name: 'Completed', value: statusGroup['completed'] ?? 0, color: '#33c9c7' },
+    { name: 'Archived', value: statusGroup['archived'] ?? 0, color: '#9ca3af' },
   ]
 
   const surveysByStatus = [
-    { name: 'Published', value: surveyGroup['published'] ?? 0, color: '#22c55e' },
-    { name: 'Draft',     value: surveyGroup['draft']     ?? 0, color: '#f59e0b' },
-    { name: 'Closed',    value: surveyGroup['closed']    ?? 0, color: '#6b7280' },
+    { name: 'Published', value: surveyGroup['published'] ?? 0, color: '#00B3B0' },
+    { name: 'Draft', value: surveyGroup['draft'] ?? 0, color: '#111827' },
+    { name: 'Closed', value: surveyGroup['closed'] ?? 0, color: '#9ca3af' },
   ]
 
   // Project trend — last 6 months
@@ -136,9 +137,9 @@ export default async function AppDashboard() {
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">Recent Projects</h2>
           {canCreate && (
-            <Link href="/app/projects/new" className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
-              + New Project
-            </Link>
+            <Button asChild size="sm">
+              <Link href="/app/projects/new">+ New Project</Link>
+            </Button>
           )}
         </div>
         <div className="divide-y divide-gray-50">
@@ -155,12 +156,11 @@ export default async function AppDashboard() {
                     {new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
                 </div>
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                  p.status === 'active'    ? 'bg-green-100 text-green-700'  :
-                  p.status === 'completed' ? 'bg-blue-100 text-blue-700'    :
-                  p.status === 'archived'  ? 'bg-gray-100 text-gray-500'    :
-                  'bg-yellow-100 text-yellow-700'
-                }`}>
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${p.status === 'active' ? 'bg-green-100 text-green-700' :
+                  p.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                    p.status === 'archived' ? 'bg-gray-100 text-gray-500' :
+                      'bg-yellow-100 text-yellow-700'
+                  }`}>
                   {p.status}
                 </span>
               </Link>
@@ -169,7 +169,9 @@ export default async function AppDashboard() {
             <div className="px-6 py-10 text-center text-gray-400 text-sm">
               No projects yet.
               {canCreate && (
-                <>{' '}<Link href="/app/projects/new" className="text-blue-600 hover:underline">Create your first project</Link></>
+                <>{' '}<Button asChild variant="link">
+                  <Link href="/app/projects/new">Create your first project</Link>
+                </Button></>
               )}
             </div>
           )}

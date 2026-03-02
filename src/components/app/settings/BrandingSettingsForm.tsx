@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/DatabaseClientManager'
+import { Button } from '@/components/ui/button'
 import type { AppSettings } from '@/lib/settings/AppSettingsLoader'
+import { createClient } from '@/lib/supabase/DatabaseClientManager'
+import { useState } from 'react'
 
 interface Props {
   initialSettings: AppSettings
@@ -132,22 +133,21 @@ export default function BrandingSettingsForm({ initialSettings }: Props) {
 
       {/* Status message */}
       {message && (
-        <div className={`text-sm px-3 py-2 rounded-lg border ${
-          message.type === 'success'
+        <div className={`text-sm px-3 py-2 rounded-lg border ${message.type === 'success'
             ? 'bg-green-50 text-green-700 border-green-200'
             : 'bg-red-50 text-red-600 border-red-200'
-        }`}>
+          }`}>
           {message.text}
         </div>
       )}
 
-      <button
+      <Button
         onClick={handleSave}
         disabled={saving || uploading}
-        className="px-6 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="bg-violet-600 hover:bg-violet-500 rounded-lg"
       >
         {saving ? 'Saving…' : 'Save Branding'}
-      </button>
+      </Button>
     </div>
   )
 }

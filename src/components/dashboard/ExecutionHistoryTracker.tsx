@@ -1,8 +1,9 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 interface ScoreRun {
   id: string
@@ -34,12 +35,13 @@ export default function ScoreRunHistory({ scoreRuns, currentRunId, projectId, su
 
   return (
     <>
-      <button
+      <Button
         onClick={() => setIsOpen(true)}
-        className="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"
+        variant="link"
+        className="text-blue-600 hover:text-blue-800 p-0 h-auto text-sm"
       >
         📊 View History ({scoreRuns.length} runs)
-      </button>
+      </Button>
 
       <AnimatePresence>
         {isOpen && (
@@ -67,12 +69,14 @@ export default function ScoreRunHistory({ scoreRuns, currentRunId, projectId, su
                       <h2 className="text-xl font-bold text-gray-900">Score Run History</h2>
                       <p className="text-sm text-gray-500 mt-1">{scoreRuns.length} score runs over time</p>
                     </div>
-                    <button
+                    <Button
                       onClick={() => setIsOpen(false)}
-                      className="text-gray-400 hover:text-gray-600 text-2xl font-light"
+                      variant="ghost"
+                      size="icon"
+                      className="text-gray-400 hover:text-gray-600"
                     >
                       ×
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -120,13 +124,12 @@ export default function ScoreRunHistory({ scoreRuns, currentRunId, projectId, su
                         return (
                           <div
                             key={run.id}
-                            className={`border rounded-lg p-4 transition-all ${
-                              isCurrent
+                            className={`border rounded-lg p-4 transition-all ${isCurrent
                                 ? 'border-blue-300 bg-blue-50'
                                 : isSelected
-                                ? 'border-blue-200 bg-blue-25'
-                                : 'border-gray-200 bg-white hover:border-gray-300'
-                            }`}
+                                  ? 'border-blue-200 bg-blue-25'
+                                  : 'border-gray-200 bg-white hover:border-gray-300'
+                              }`}
                           >
                             <div className="flex items-center justify-between">
                               <div>
@@ -170,12 +173,13 @@ export default function ScoreRunHistory({ scoreRuns, currentRunId, projectId, su
                 </div>
 
                 <div className="p-6 border-t border-gray-200 bg-gray-50">
-                  <button
+                  <Button
                     onClick={() => setIsOpen(false)}
-                    className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                    variant="secondary"
+                    className="w-full bg-gray-600 hover:bg-gray-700 text-white rounded-lg"
                   >
                     Close
-                  </button>
+                  </Button>
                 </div>
               </motion.div>
             </div>

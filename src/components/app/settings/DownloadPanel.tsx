@@ -1,5 +1,6 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
 const ENV_TEMPLATE = `# ── Supabase ──────────────────────────────────────────────
@@ -189,14 +190,16 @@ export default function DownloadPanel() {
             <code className="bg-gray-200 px-1 rounded text-gray-700">.git</code>. No secrets included.
           </p>
         </div>
-        <button
+        <Button
           onClick={handleDownloadProject}
           disabled={downloadingProject}
-          className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+          variant="secondary"
+          size="lg"
+          className="shrink-0 bg-gray-900 hover:bg-gray-700 text-white rounded-xl"
         >
           <span>{downloadingProject ? '⏳' : '↓'}</span>
           {downloadingProject ? 'Zipping… please wait' : 'Download ZIP'}
-        </button>
+        </Button>
       </div>
 
       {/* Step-by-step guide */}
@@ -238,12 +241,14 @@ export default function DownloadPanel() {
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-medium text-gray-500">.env.local template</span>
-                      <button
+                      <Button
                         onClick={handleCopyEnv}
-                        className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-400 px-2.5 py-1 rounded-lg transition-colors"
+                        variant="outline"
+                        size="xs"
+                        className="rounded-lg"
                       >
                         {copiedEnv ? '✓ Copied' : 'Copy'}
-                      </button>
+                      </Button>
                     </div>
                     <pre className="bg-gray-950 text-green-400 text-xs rounded-lg p-4 overflow-x-auto leading-relaxed whitespace-pre">
                       {step.code}

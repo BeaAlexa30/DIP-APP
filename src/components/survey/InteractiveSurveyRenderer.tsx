@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { Button } from '@/components/ui/button';
+import { useState } from 'react';
 
 interface Option { id: string; label: string; value_key: string; order: number }
 interface Question {
@@ -167,17 +168,13 @@ export default function SurveyFlow({
               {current.type === 'single_select' && (
                 <div className="space-y-2">
                   {current.options.sort((a, b) => a.order - b.order).map(opt => (
-                    <button
+                    <Button
                       key={opt.value_key}
                       onClick={() => handleAnswer(current.id, opt.value_key)}
-                      className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${
-                        answers[current.id] === opt.value_key
-                          ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                          : 'bg-white border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50'
-                      }`}
+                      className="w-full text-left px-4 py-3 rounded-xl text-sm transition-all"
                     >
                       {opt.label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}
@@ -251,17 +248,13 @@ export default function SurveyFlow({
                   <div>
                     <div className={gridClass}>
                       {scaleValues.map(num => (
-                        <button
+                        <Button
                           key={num}
                           onClick={() => handleAnswer(current.id, num.toString())}
-                          className={`${scaleValues.length <= 11 ? 'aspect-square' : 'px-4 py-2'} flex items-center justify-center rounded-lg border text-sm font-semibold transition-all ${
-                            answers[current.id] === num.toString()
-                              ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-110'
-                              : 'bg-white border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50'
-                          }`}
+                          className={`${scaleValues.length <= 11 ? 'aspect-square' : 'px-4 py-2'} flex items-center justify-center rounded-lg text-sm font-semibold transition-all`}
                         >
                           {num}{isPercentage && num === max ? '%' : ''}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                     <div className="flex justify-between mt-2 px-1">
@@ -297,29 +290,28 @@ export default function SurveyFlow({
       <div className="bg-white border-t border-gray-200 px-6 py-4">
         <div className="max-w-xl mx-auto flex gap-3">
           {currentIndex > 0 && (
-            <button
+            <Button
               onClick={handleBack}
-              className="px-5 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
             >
               ← Back
-            </button>
+            </Button>
           )}
           {currentIndex < allQuestions.length - 1 ? (
-            <button
+            <Button
               onClick={handleNext}
               disabled={!canAdvance}
-              className="flex-1 bg-blue-600 text-white text-sm font-medium py-2.5 rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors"
+              className="flex-1"
             >
               Next →
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               onClick={handleSubmit}
               disabled={submitting || !canAdvance}
-              className="flex-1 bg-green-600 text-white text-sm font-medium py-2.5 rounded-xl hover:bg-green-700 disabled:opacity-40 transition-colors"
+              className="flex-1"
             >
               {submitting ? 'Submitting…' : 'Submit Response'}
-            </button>
+            </Button>
           )}
         </div>
       </div>

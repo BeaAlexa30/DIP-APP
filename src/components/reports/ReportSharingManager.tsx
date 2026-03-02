@@ -1,5 +1,6 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
 interface Props {
@@ -32,7 +33,7 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
     try {
       const res = await fetch(`/api/reporting/manage-sharing?projectId=${projectId}&scoreRunId=${scoreRunId}`)
       console.log('Load shares response status:', res.status)
-      
+
       if (res.ok) {
         const data = await res.json()
         setShares(data.shares ?? [])
@@ -59,10 +60,10 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
     setLoading(true)
     setError(null)
     setSuccess(null)
-    
+
     const expiryValue = expiryDays || 0
     console.log('Generating link with expiry days:', expiryValue)
-    
+
     try {
       const res = await fetch('/api/reporting/manage-sharing', {
         method: 'POST',
@@ -75,7 +76,7 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
       })
 
       console.log('Generate link response status:', res.status)
-      
+
       if (res.ok) {
         const data = await res.json()
         console.log('Generated link data:', data)
@@ -118,12 +119,12 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
 
   return (
     <>
-      <button
+      <Button
         onClick={handleOpen}
-        className="bg-blue-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
+        className="rounded-xl"
       >
         🔗 Share Report
-      </button>
+      </Button>
 
       {isOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -133,12 +134,14 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
                 <h2 className="text-lg font-bold text-gray-900">Share Report</h2>
                 <p className="text-xs text-gray-500 mt-1">Generate read-only shareable links</p>
               </div>
-              <button
+              <Button
                 onClick={() => setIsOpen(false)}
+                variant="ghost"
+                size="icon"
                 className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
               >
                 ×
-              </button>
+              </Button>
             </div>
 
             <div className="p-6 space-y-6">
@@ -173,20 +176,21 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
                     />
                     <p className="text-xs text-blue-600 mt-1">Enter 0 for never expires, or number of days (e.g. 30, 60, 90)</p>
                   </div>
-                  <button
+                  <Button
                     onClick={handleGenerate}
                     disabled={loading}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                    size="sm"
+                    className="whitespace-nowrap"
                   >
                     {loading ? 'Generating...' : 'Generate Link'}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
               {/* Existing Links */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                  Active Links 
+                  Active Links
                   {loadingShares && <span className="text-xs text-gray-400 font-normal ml-2">(Loading...)</span>}
                   {!loadingShares && shares.length > 0 && (
                     <span className="text-xs text-gray-500 font-normal ml-2">
@@ -218,20 +222,24 @@ export default function ShareReportButton({ projectId, scoreRunId }: Props) {
                                 <code className="text-xs text-blue-600 bg-white border border-gray-300 px-2 py-1 rounded flex-1 truncate">
                                   {share.url}
                                 </code>
-                                <button
+                                <Button
                                   onClick={() => handleCopy(share.url)}
-                                  className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition-colors whitespace-nowrap"
+                                  variant="outline"
+                                  size="xs"
+                                  className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200 whitespace-nowrap"
                                 >
                                   {copied === share.url ? '✓ Copied' : 'Copy'}
-                                </button>
+                                </Button>
                               </div>
                             </div>
-                            <button
+                            <Button
                               onClick={() => handleDeactivate(share.id)}
-                              className="text-xs text-red-600 hover:text-red-800 font-medium whitespace-nowrap"
+                              variant="ghost"
+                              size="xs"
+                              className="text-red-600 hover:text-red-800 whitespace-nowrap"
                             >
                               Deactivate
-                            </button>
+                            </Button>
                           </div>
                           <p className="text-xs text-gray-400">
                             {share.viewCount ?? 0} view{(share.viewCount ?? 0) === 1 ? '' : 's'}

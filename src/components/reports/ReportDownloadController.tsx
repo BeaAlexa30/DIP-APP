@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { generatePDFReport } from '@/lib/reports/DocumentGenerationService'
 import type { ScoringResult } from '@/lib/scoring/AssessmentScoringEngine'
+import { useState } from 'react'
 
 interface Props {
   projectName: string
@@ -56,19 +57,20 @@ export default function ReportExportButton({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'export_pdf', details: { projectName, frameworkVersion } }),
-      }).catch(() => {})
+      }).catch(() => { })
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <button
+    <Button
       onClick={handleExport}
       disabled={loading}
-      className="bg-gray-900 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-gray-700 disabled:opacity-50 transition-colors"
+      variant="secondary"
+      className="bg-gray-900 text-white hover:bg-gray-700 px-5 rounded-xl"
     >
       {loading ? 'Generating PDF…' : '↓ Export PDF Report'}
-    </button>
+    </Button>
   )
 }

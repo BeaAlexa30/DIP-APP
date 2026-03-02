@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { Button } from '@/components/ui/button'
+import { useCallback, useEffect, useState } from 'react'
 
 interface ActivityLog {
   id: string
@@ -186,19 +187,23 @@ export default function ActivityLogPanel() {
             onKeyDown={e => { if (e.key === 'Enter') { setFilterUser(pendingUser); setPage(1) } }}
             className="text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 w-52"
           />
-          <button
+          <Button
             onClick={() => { setFilterUser(pendingUser); setPage(1) }}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white hover:bg-gray-50"
+            variant="outline"
+            size="sm"
+            className="rounded-lg"
           >
             Search
-          </button>
+          </Button>
           {(filterAction || filterUser) && (
-            <button
+            <Button
               onClick={() => { setFilterAction(''); setFilterUser(''); setPendingUser(''); setPage(1) }}
-              className="text-sm text-gray-500 hover:text-gray-700 px-2"
+              variant="ghost"
+              size="sm"
+              className="text-gray-500 hover:text-gray-700"
             >
               Clear
-            </button>
+            </Button>
           )}
         </div>
 
@@ -247,21 +252,25 @@ export default function ActivityLogPanel() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
-          <button
+          <Button
             disabled={page <= 1}
             onClick={() => setPage(p => p - 1)}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 disabled:opacity-40 hover:bg-gray-50"
+            variant="outline"
+            size="sm"
+            className="rounded-lg"
           >
             ← Previous
-          </button>
+          </Button>
           <span className="text-gray-500">Page {page} of {totalPages}</span>
-          <button
+          <Button
             disabled={page >= totalPages}
             onClick={() => setPage(p => p + 1)}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-700 disabled:opacity-40 hover:bg-gray-50"
+            variant="outline"
+            size="sm"
+            className="rounded-lg"
           >
             Next →
-          </button>
+          </Button>
         </div>
       )}
     </div>

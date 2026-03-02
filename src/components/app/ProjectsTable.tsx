@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 const statusColors: Record<string, string> = {
   draft: 'bg-yellow-100 text-yellow-700',
@@ -37,12 +38,12 @@ interface Column {
 
 const ALL_COLUMNS: Column[] = [
   { key: 'client_name', label: 'Client' },
-  { key: 'industry',    label: 'Industry' },
-  { key: 'goal',        label: 'Goal' },
-  { key: 'status',      label: 'Status' },
+  { key: 'industry', label: 'Industry' },
+  { key: 'goal', label: 'Goal' },
+  { key: 'status', label: 'Status' },
   { key: 'survey_status', label: 'Survey' },
-  { key: 'survey_count',  label: 'Framework Survey' },
-  { key: 'created_at',    label: 'Created' },
+  { key: 'survey_count', label: 'Framework Survey' },
+  { key: 'created_at', label: 'Created' },
 ]
 
 interface Props {
@@ -234,20 +235,22 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
             </div>
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-              <button
+              <Button
                 onClick={() => { setDeleteTarget(null); setDeleteConfirmInput(''); setDeleteError(null) }}
                 disabled={deleteLoading}
-                className="text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg transition-colors"
+                variant="outline"
+                className="rounded-lg"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleDelete}
                 disabled={deleteLoading || deleteConfirmInput !== deleteTarget.client_name}
-                className="text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 px-4 py-2 rounded-lg transition-colors"
+                variant="destructive"
+                className="rounded-lg"
               >
                 {deleteLoading ? 'Deleting…' : 'Delete Permanently'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -373,26 +376,30 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
               className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             {search && (
-              <button
+              <Button
                 onClick={() => setSearch('')}
+                variant="ghost"
+                size="icon-sm"
                 className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600"
               >
                 ✕
-              </button>
+              </Button>
             )}
           </div>
 
           {/* Column picker trigger */}
           <div className="relative">
-            <button
+            <Button
               onClick={() => setShowColumnPicker((v) => !v)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 rounded-lg"
             >
               <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
               </svg>
               Columns
-            </button>
+            </Button>
             {showColumnPicker && (
               <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-48">
                 <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Visible Columns</p>
@@ -412,15 +419,17 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
           </div>
 
           {/* Print Report */}
-          <button
+          <Button
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 rounded-lg"
           >
             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
             </svg>
             Print Report
-          </button>
+          </Button>
         </div>
 
         {/* Row 2: filter dropdowns */}
@@ -459,17 +468,19 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
           </select>
 
           {hasActiveFilters && (
-            <button
+            <Button
               onClick={() => {
                 setSearch('')
                 setFilterStatus('')
                 setFilterSurveyStatus('')
                 setFilterIndustry('')
               }}
-              className="text-sm text-red-500 hover:text-red-700 px-2 py-1 rounded transition-colors"
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-700"
             >
               Clear filters
-            </button>
+            </Button>
           )}
 
           <span className="ml-auto text-xs text-gray-400">
@@ -500,7 +511,7 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 {shownColumns.map((col) => {
-                  const sortable = ['client_name','industry','status','survey_status','survey_count','created_at'].includes(col.key)
+                  const sortable = ['client_name', 'industry', 'status', 'survey_status', 'survey_count', 'created_at'].includes(col.key)
                   return (
                     <th
                       key={col.key}
@@ -563,12 +574,14 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
                   )}
                   {isAdmin && (
                     <td className="px-6 py-4 no-print" onClick={e => e.stopPropagation()}>
-                      <button
+                      <Button
                         onClick={() => { setDeleteTarget(p); setDeleteConfirmInput(''); setDeleteError(null) }}
-                        className="text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 bg-white hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors"
+                        variant="outline"
+                        size="xs"
+                        className="text-red-600 hover:text-red-800 border-red-200 hover:border-red-400 hover:bg-red-50 rounded-lg"
                       >
                         Delete
-                      </button>
+                      </Button>
                     </td>
                   )}
                 </tr>
@@ -578,17 +591,18 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
         ) : (
           <div className="py-16 text-center text-gray-400">
             <p className="text-base mb-2">No projects match your filters</p>
-            <button
+            <Button
               onClick={() => {
                 setSearch('')
                 setFilterStatus('')
                 setFilterSurveyStatus('')
                 setFilterIndustry('')
               }}
-              className="text-sm text-blue-600 hover:underline"
+              variant="link"
+              className="text-blue-600"
             >
               Clear all filters
-            </button>
+            </Button>
           </div>
         )}
 

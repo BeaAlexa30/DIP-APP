@@ -1,15 +1,16 @@
 'use client'
 
+import { Button } from '@/components/ui/button';
+import type { UserProfile } from '@/lib/auth/UserPermissionDefinitions';
+import { ROLE_LABELS } from '@/lib/auth/UserPermissionDefinitions';
+import type { AppSettings } from '@/lib/settings/AppSettingsLoader';
 import { createClient } from '@/lib/supabase/DatabaseClientManager';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import type { UserProfile } from '@/lib/auth/UserPermissionDefinitions'
-import { ROLE_LABELS } from '@/lib/auth/UserPermissionDefinitions'
-import type { AppSettings } from '@/lib/settings/AppSettingsLoader'
+import { useEffect, useState } from 'react';
 
 const ROLE_BADGE_COLORS: Record<string, string> = {
-  admin:   'bg-blue-100 text-blue-700',
+  admin: 'bg-blue-100 text-blue-700',
   analyst: 'bg-gray-100 text-gray-600',
 }
 
@@ -49,7 +50,7 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
     fetch('/api/admin/notifications')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setPendingCount(data.total ?? 0) })
-      .catch(() => {})
+      .catch(() => { })
   }, [profile?.role])
 
   const formatTime = (date: Date) => {
@@ -76,12 +77,14 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
           </div>
           <span className="text-gray-900 font-semibold text-sm">{companyName}</span>
         </div>
-        <button
+        <Button
           onClick={() => setIsOpen(!isOpen)}
-          className="text-gray-400 hover:text-gray-700 p-2"
+          variant="ghost"
+          size="icon"
+          className="text-gray-400 hover:text-gray-700"
         >
           {isOpen ? '✕' : '☰'}
-        </button>
+        </Button>
       </div>
 
       {/* Sidebar Overlay: Closes menu when clicking outside */}
@@ -106,13 +109,15 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={logoSrc} alt="Logo" width={40} height={40} className="w-10 h-10 object-contain" />
               </Link>
-              <button
+              <Button
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 text-lg"
+                variant="ghost"
+                size="icon"
+                className="text-gray-400 hover:text-gray-600"
                 title="Expand sidebar"
               >
                 »
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -126,13 +131,15 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
                   <p className="text-gray-400 text-sm">Platform v1</p>
                 </div>
               </Link>
-              <button
+              <Button
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 text-lg"
+                variant="ghost"
+                size="icon"
+                className="text-gray-400 hover:text-gray-600"
                 title="Collapse sidebar"
               >
                 «
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -170,9 +177,8 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-4 px-4 py-3 rounded-lg text-base font-medium transition-colors ${
-                  active ? '' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-                } ${isCollapsed ? 'justify-center' : ''}`}
+                className={`flex items-center gap-4 px-4 py-3 rounded-lg text-base font-medium transition-colors ${active ? '' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                  } ${isCollapsed ? 'justify-center' : ''}`}
                 style={active ? { backgroundColor: `${primaryColor}18`, color: primaryColor } : {}}
                 title={isCollapsed ? item.label : ''}
               >
@@ -205,13 +211,15 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
               <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-sm text-blue-600 font-medium uppercase">
                 {(profile?.full_name ?? profile?.email ?? 'U').charAt(0)}
               </div>
-              <button
+              <Button
                 onClick={handleSignOut}
-                className="text-gray-300 hover:text-gray-500 text-base transition-colors p-1"
+                variant="ghost"
+                size="icon"
+                className="text-gray-300 hover:text-gray-500"
                 title="Sign out"
               >
                 ↩
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="flex items-center gap-3">
@@ -226,13 +234,15 @@ export default function Sidebar({ profile, settings }: { profile: UserProfile | 
                   {ROLE_LABELS[profile?.role as keyof typeof ROLE_LABELS] ?? profile?.role ?? '—'}
                 </span>
               </div>
-              <button
+              <Button
                 onClick={handleSignOut}
-                className="text-gray-300 hover:text-gray-500 text-base transition-colors shrink-0 p-1"
+                variant="ghost"
+                size="icon"
+                className="text-gray-300 hover:text-gray-500 shrink-0"
                 title="Sign out"
               >
                 ↩
-              </button>
+              </Button>
             </div>
           )}
         </div>

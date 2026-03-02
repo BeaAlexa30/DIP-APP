@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
-import type { DashboardInsightPayload, DashboardInsightData } from '@/app/api/insights/dashboard/route'
+import type { DashboardInsightData, DashboardInsightPayload } from '@/app/api/insights/dashboard/route'
+import { Button } from '@/components/ui/button'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 interface Props {
   payload: DashboardInsightPayload
@@ -47,9 +48,9 @@ function writeCache(entry: CacheEntry) {
 }
 
 const signalConfig = {
-  good:     { bg: 'bg-green-50 border-green-200',   badge: 'bg-green-100 text-green-700',   dot: 'bg-green-500',   label: 'Healthy'         },
-  warning:  { bg: 'bg-yellow-50 border-yellow-200', badge: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-400',  label: 'Needs Attention' },
-  critical: { bg: 'bg-red-50 border-red-200',       badge: 'bg-red-100 text-red-700',       dot: 'bg-red-500',     label: 'Critical'        },
+  good: { bg: 'bg-green-50 border-green-200', badge: 'bg-green-100 text-green-700', dot: 'bg-green-500', label: 'Healthy' },
+  warning: { bg: 'bg-yellow-50 border-yellow-200', badge: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-400', label: 'Needs Attention' },
+  critical: { bg: 'bg-red-50 border-red-200', badge: 'bg-red-100 text-red-700', dot: 'bg-red-500', label: 'Critical' },
 }
 
 const trendLabel = { improving: 'Improving', stable: 'Stable', declining: 'Declining' }
@@ -76,7 +77,7 @@ export default function DashboardAutoInsights({ payload }: Props) {
       setIsFallback(cached.isFallback)
       setGenerated(true)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /** True when analytics data is unchanged since last generation */
@@ -122,27 +123,33 @@ export default function DashboardAutoInsights({ payload }: Props) {
   const cfg = insight ? (signalConfig[insight.healthSignal] ?? signalConfig.warning) : null
 
   const tabs = [
-    { key: 'descriptive'  as const, label: 'What happened?'     },
-    { key: 'diagnostic'   as const, label: 'Why?'               },
-    { key: 'predictive'   as const, label: 'What might happen?' },
-    { key: 'prescriptive' as const, label: 'What to do?'        },
-    { key: 'kpi'          as const, label: 'KPI View'           },
+    { key: 'descriptive' as const, label: 'What happened?' },
+    { key: 'diagnostic' as const, label: 'Why?' },
+    { key: 'predictive' as const, label: 'What might happen?' },
+    { key: 'prescriptive' as const, label: 'What to do?' },
+    { key: 'kpi' as const, label: 'KPI View' },
   ]
 
   return (
     <div className="mb-8">
       {!generated ? (
-        <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-5 flex items-center justify-between gap-4">
+        <div
+          className="rounded-xl p-5 flex items-center justify-between gap-4"
+          style={{
+            background: 'linear-gradient(180deg, rgba(0, 179, 176, 0.06), rgba(124, 58, 237, 0.04))',
+            border: '1px solid rgba(124, 58, 237, 0.2)',
+          }}
+        >
           <div>
             <p className="text-sm font-semibold text-violet-900">AI Dashboard Insights</p>
             <p className="text-xs text-violet-500 mt-0.5">
               Powered by Groq - 5-dimensional analysis: Descriptive - Diagnostic - Predictive - Prescriptive - KPI
             </p>
           </div>
-          <button
+          <Button
             onClick={generate}
             disabled={loading}
-            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 rounded-lg whitespace-nowrap"
           >
             {loading ? (
               <>
@@ -153,7 +160,7 @@ export default function DashboardAutoInsights({ payload }: Props) {
                 Analyzing...
               </>
             ) : 'Generate Insights'}
-          </button>
+          </Button>
         </div>
       ) : insight && cfg ? (
         <div className={`border rounded-xl overflow-hidden ${cfg.bg}`}>
@@ -169,10 +176,12 @@ export default function DashboardAutoInsights({ payload }: Props) {
                   <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">Up to date</span>
                 )}
               </div>
-              <button
+              <Button
                 onClick={() => { setGenerated(false); setInsight(null); setError(null) }}
-                className="text-gray-400 hover:text-gray-600 text-xs shrink-0"
-              >Dismiss</button>
+                variant="ghost"
+                size="xs"
+                className="text-gray-400 hover:text-gray-600 shrink-0"
+              >Dismiss</Button>
             </div>
             <p className="text-xs text-gray-400 mt-1 ml-4">
               {isFallback ? 'Rule-based Analysis' : 'AI Analysis - Groq (llama-3.3-70b-versatile)'}
@@ -182,17 +191,18 @@ export default function DashboardAutoInsights({ payload }: Props) {
           {/* Tabs */}
           <div className="flex border-b border-white/50 bg-white/30 overflow-x-auto">
             {tabs.map(tab => (
-              <button
+              <Button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
-                  activeTab === tab.key
-                    ? 'border-violet-500 text-violet-700 bg-white/50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-white/20'
-                }`}
+                variant="ghost"
+                size="sm"
+                className={`px-4 py-2.5 rounded-none whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.key
+                  ? 'border-violet-500 text-violet-700 bg-white/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-white/20'
+                  }`}
               >
                 {tab.label}
-              </button>
+              </Button>
             ))}
           </div>
 
@@ -303,13 +313,15 @@ export default function DashboardAutoInsights({ payload }: Props) {
             {dataUnchanged ? (
               <p className="text-xs text-gray-400">No analytics changes since last analysis</p>
             ) : (
-              <button
+              <Button
                 onClick={generate}
                 disabled={loading}
-                className="text-xs text-violet-600 hover:text-violet-800 disabled:opacity-40 transition-colors"
+                variant="ghost"
+                size="xs"
+                className="text-violet-600 hover:text-violet-800"
               >
                 {loading ? 'Refreshing...' : 'Refresh insights'}
-              </button>
+              </Button>
             )}
           </div>
         </div>

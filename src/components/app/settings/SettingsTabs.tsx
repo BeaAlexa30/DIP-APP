@@ -1,5 +1,6 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
 interface Props {
@@ -12,11 +13,11 @@ interface Props {
 }
 
 const TABS = [
-  { id: 'branding',       label: 'Branding' },
-  { id: 'users',          label: 'User Accounts' },
-  { id: 'activity',       label: 'Activity Log' },
-  { id: 'notifications',  label: 'Notifications' },
-  { id: 'download',       label: 'Download' },
+  { id: 'branding', label: 'Branding' },
+  { id: 'users', label: 'User Accounts' },
+  { id: 'activity', label: 'Activity Log' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'download', label: 'Download' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -29,14 +30,14 @@ export default function SettingsTabs({ brandingTab, usersTab, activityTab, notif
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200 mb-8 flex-wrap">
         {TABS.map(tab => (
-          <button
+          <Button
             key={tab.id}
             onClick={() => setActive(tab.id)}
-            className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
-              active === tab.id
+            variant="ghost"
+            className={`relative px-4 py-2.5 rounded-none transition-colors ${active === tab.id
                 ? 'text-violet-600 border-b-2 border-violet-600 -mb-px'
                 : 'text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
             {tab.label}
             {tab.id === 'notifications' && pendingCount > 0 && (
@@ -44,16 +45,16 @@ export default function SettingsTabs({ brandingTab, usersTab, activityTab, notif
                 {pendingCount > 9 ? '9+' : pendingCount}
               </span>
             )}
-          </button>
+          </Button>
         ))}
       </div>
 
       {/* Tab content */}
-      {active === 'branding'      && brandingTab}
-      {active === 'users'         && usersTab}
-      {active === 'activity'      && activityTab}
+      {active === 'branding' && brandingTab}
+      {active === 'users' && usersTab}
+      {active === 'activity' && activityTab}
       {active === 'notifications' && notificationsTab}
-      {active === 'download'      && downloadTab}
+      {active === 'download' && downloadTab}
     </div>
   )
 }

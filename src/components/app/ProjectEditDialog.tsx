@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
 import type { Database } from '@/types/DatabaseSchemaDefinitions'
+import { AnimatePresence, motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
+import { useState, type FormEvent } from 'react'
 
 type Project = Database['public']['Tables']['projects']['Row']
 
@@ -203,21 +204,22 @@ export default function EditProjectModal({ project, isOpen, onClose }: Props) {
 
                 {/* Actions */}
                 <div className="flex gap-3 pt-4">
-                  <button
+                  <Button
                     type="button"
                     onClick={onClose}
                     disabled={loading}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                    variant="outline"
+                    className="flex-1 rounded-lg"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    className="flex-1 rounded-lg"
                   >
                     {loading ? 'Saving...' : 'Save Changes'}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </motion.div>

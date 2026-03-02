@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { useCan } from '@/components/app/UserProfileProvider'
+import { Button } from '@/components/ui/button'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 interface Props {
   surveyId: string
@@ -99,18 +100,19 @@ export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt,
         <p>• All runs checksummed for audit trail</p>
       </div>
 
-      <button
+      <Button
         onClick={handleRun}
         disabled={isDisabled}
         title={hasNoNewResponses ? 'No new responses since last run' : undefined}
-        className="w-full bg-gray-900 text-white text-sm font-medium py-2.5 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+        variant="secondary"
+        className="w-full bg-gray-900 text-white hover:bg-gray-700 rounded-lg"
       >
         {hasNoNewResponses ? 'No new responses — up to date'
           : loading ? 'Running Scoring Engine…'
-          : lastRunAt ? 'Recompute Scores'
-          : 'Run Scoring Engine'
+            : lastRunAt ? 'Recompute Scores'
+              : 'Run Scoring Engine'
         }
-      </button>
+      </Button>
     </div>
   )
 }

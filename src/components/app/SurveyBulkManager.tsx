@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import SurveyCard from './SurveyDisplayWidget'
 import { useCan } from './UserProfileProvider'
 
@@ -144,31 +145,37 @@ export default function SurveyBulkManager({ surveysWithData, projectId, projectA
       {isAdmin && (
         <div className="flex items-center justify-between mb-3">
           {!selectionMode ? (
-            <button
+            <Button
               onClick={() => setSelectionMode(true)}
-              className="text-xs font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 bg-white px-3 py-1.5 rounded-lg transition-colors"
+              variant="outline"
+              size="xs"
+              className="text-blue-600 hover:text-blue-800 border-blue-200 hover:border-blue-400 rounded-lg"
             >
               ☑ Select Surveys
-            </button>
+            </Button>
           ) : (
             <div className="flex items-center gap-3">
-              <button
+              <Button
                 onClick={toggleSelectAll}
                 disabled={isBusy}
-                className="text-xs font-medium text-gray-700 hover:text-gray-900 border border-gray-200 hover:border-gray-400 bg-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                variant="outline"
+                size="xs"
+                className="rounded-lg"
               >
                 {allSelected ? 'Deselect All' : 'Select All'}
-              </button>
+              </Button>
               <span className="text-xs text-gray-500">
                 {selectedCount} selected
               </span>
-              <button
+              <Button
                 onClick={exitSelectionMode}
                 disabled={isBusy}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                variant="ghost"
+                size="xs"
+                className="text-gray-400 hover:text-gray-600"
               >
                 ✕ Cancel
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -203,36 +210,41 @@ export default function SurveyBulkManager({ surveysWithData, projectId, projectA
 
               {canManage && (
                 <>
-                  <button
+                  <Button
                     onClick={bulkClose}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-white bg-gray-700 hover:bg-gray-900 px-4 py-2 rounded-lg transition-colors"
+                    size="sm"
+                    className="bg-gray-700 hover:bg-gray-900 rounded-lg"
                   >
                     🔒 Close ({selectedCount})
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={bulkReopen}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-800 px-4 py-2 rounded-lg transition-colors"
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-800 rounded-lg"
                   >
                     🔓 Re-open ({selectedCount})
-                  </button>
+                  </Button>
                 </>
               )}
 
               {canRunScoring && (
-                <button
+                <Button
                   onClick={bulkRecompute}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-800 px-4 py-2 rounded-lg transition-colors"
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-800 rounded-lg"
                 >
                   ⚡ Recompute Scoring ({selectedCount})
-                </button>
+                </Button>
               )}
 
-              <button
+              <Button
                 onClick={() => setSelectedIds(new Set())}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors ml-1"
+                variant="ghost"
+                size="xs"
+                className="text-gray-400 hover:text-gray-600 ml-1"
               >
                 ✕
-              </button>
+              </Button>
             </>
           )}
         </div>

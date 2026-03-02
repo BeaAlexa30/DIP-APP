@@ -1,10 +1,11 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
+import type { Database } from '@/types/DatabaseSchemaDefinitions'
 import { useState } from 'react'
 import EditProjectModal from './ProjectEditDialog'
 import ArchiveProjectButton from './ProjectRemovalControl'
 import { useCan } from './UserProfileProvider'
-import type { Database } from '@/types/DatabaseSchemaDefinitions'
 
 type Project = Database['public']['Tables']['projects']['Row']
 
@@ -24,12 +25,12 @@ export default function ProjectActions({ project, surveyCount }: Props) {
     <>
       <div className="flex gap-3">
         {canEdit && (
-          <button
+          <Button
             onClick={() => setIsEditOpen(true)}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="rounded-lg"
           >
             Edit Project
-          </button>
+          </Button>
         )}
         {canArchive && (
           <ArchiveProjectButton

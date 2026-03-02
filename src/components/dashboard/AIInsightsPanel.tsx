@@ -1,5 +1,6 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
 interface ActionItem {
@@ -64,14 +65,14 @@ interface Props {
 }
 
 const priorityColor = {
-  high:   'bg-red-100 text-red-700 border-red-200',
+  high: 'bg-red-100 text-red-700 border-red-200',
   medium: 'bg-amber-100 text-amber-700 border-amber-200',
-  low:    'bg-green-100 text-green-700 border-green-200',
+  low: 'bg-green-100 text-green-700 border-green-200',
 }
 
-const trendIcon  = { improving: '↑', stable: '→', declining: '↓' }
+const trendIcon = { improving: '↑', stable: '→', declining: '↓' }
 const trendColor = { improving: 'text-green-600', stable: 'text-gray-500', declining: 'text-red-500' }
-const riskColor  = { low: 'text-green-600', medium: 'text-amber-600', high: 'text-orange-600', critical: 'text-red-600' }
+const riskColor = { low: 'text-green-600', medium: 'text-amber-600', high: 'text-orange-600', critical: 'text-red-600' }
 
 export default function AIInsightsPanel({ aiInsights, full, isFallback, tabs, scoreRunId }: Props) {
   const [activeTab, setActiveTab] = useState(tabs[0]?.key ?? 'descriptive')
@@ -124,18 +125,19 @@ export default function AIInsightsPanel({ aiInsights, full, isFallback, tabs, sc
         <>
           <div className="flex border-t border-violet-200 border-b bg-white/40 overflow-x-auto">
             {tabs.map(tab => (
-              <button
+              <Button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
-                  activeTab === tab.key
+                variant="ghost"
+                size="sm"
+                className={`flex items-center gap-1.5 px-4 py-2.5 rounded-none whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.key
                     ? 'border-violet-500 text-violet-700 bg-white/60'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-white/20'
-                }`}
+                  }`}
               >
                 <span>{tab.icon}</span>
                 {tab.label}
-              </button>
+              </Button>
             ))}
           </div>
 
