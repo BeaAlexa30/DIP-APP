@@ -143,14 +143,32 @@ export default function AddOrGenerateSurveyDialog({
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated.')
 
-      // Capture framework snapshot
-      const snapRes = await fetch('/api/assessment-frameworks/capture-version', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packId }),
-      })
-      if (!snapRes.ok) throw new Error('Failed to create framework snapshot.')
-      const snapshot = await snapRes.json()
+      const pack = packs.find(p => p.id === packId)
+      const isAiPack = pack?.version?.startsWith('ai-')
+
+      let snapshot: any
+
+      if (isAiPack) {
+        // AI packs store their questions in the survey JSONB snapshot, not in DB tables.
+        // Reuse the snapshot from an existing survey that used this pack.
+        const { data: existingSurvey, error: snapErr } = await (supabase as any)
+          .from('surveys')
+          .select('pack_version_snapshot')
+          .eq('pack_id', packId)
+          .limit(1)
+          .single()
+        if (snapErr || !existingSurvey) throw new Error('Could not retrieve AI framework snapshot.')
+        snapshot = existingSurvey.pack_version_snapshot
+      } else {
+        // Standard framework: build snapshot from DB tables
+        const snapRes = await fetch('/api/assessment-frameworks/capture-version', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ packId }),
+        })
+        if (!snapRes.ok) throw new Error('Failed to create framework snapshot.')
+        snapshot = await snapRes.json()
+      }
 
       // Create survey
       const { data: survey, error: surveyErr } = await (supabase as any)
