@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbCo
 import type { Database } from '@/types/DatabaseSchemaDefinitions'
 import ReportExportButton from '@/components/reports/ReportDownloadController'
 import ShareReportButton from '@/components/reports/ReportSharingManager'
+import AIInsightsPanel from '@/components/dashboard/AIInsightsPanel'
 import type { ScoringResult } from '@/lib/scoring/AssessmentScoringEngine'
 
 type ScoreResultWithCategory = Database['public']['Tables']['score_results']['Row'] & {
@@ -151,6 +152,7 @@ export default async function ReportPage({
               scoring={scoring}
               aiInsightSummary={aiInsights?.summary_text ?? undefined}
               aiThemes={Array.isArray(aiInsights?.themes_json) ? aiInsights.themes_json as string[] : undefined}
+              fullAnalysis={(aiInsights?.model_metadata as any)?.fullAnalysis ?? undefined}
             />
           </div>
         </div>
@@ -258,25 +260,35 @@ export default async function ReportPage({
           </table>
         </div>
 
-        {/* AI Insights */}
-        {aiInsights && (
-          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-8">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xl">✨</span>
-              <h2 className="text-base font-semibold text-purple-800">AI-Generated Insights</h2>
-              <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium">Non-Scoring</span>
-            </div>
-            <p className="text-xs text-purple-400 italic mb-5">AI-generated content for reference only. Does not affect scoring.</p>
-            <p className="text-sm text-purple-900 leading-8 tracking-wide break-words">{aiInsights.summary_text}</p>
-          </div>
-        )}
+        {/* AI Insights — 5-Dimensional Analysis */}
+        {aiInsights ? (() => {
+          const meta = aiInsights.model_metadata as any
+          const full = meta?.fullAnalysis
+          const isFallback = meta?.isFallback === true || meta?.model === 'deterministic-fallback'
+          const tabs = [
+            { key: 'descriptive',  label: 'What happened?',     icon: '📊' },
+            { key: 'diagnostic',   label: 'Why?',               icon: '🔍' },
+            { key: 'predictive',   label: 'What might happen?', icon: '🔮' },
+            { key: 'prescriptive', label: 'What to do?',        icon: '🎯' },
+            { key: 'kpi',          label: 'KPI View',            icon: '📈' },
+          ]
+          return (
+            <AIInsightsPanel
+              aiInsights={aiInsights}
+              full={full}
+              isFallback={isFallback}
+              tabs={tabs}
+              scoreRunId={scoring.scoreRunId}
+            />
+          )
+        })() : null}
 
         {/* Audit */}
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-400 font-mono">
           <p>Score Run: {scoring.scoreRunId}</p>
           <p>Checksum: {scoring.checksum}</p>
           <p>Framework: v{scoring.frameworkVersion}</p>
-          <p>Executed: {scoring.executedAt.toISOString()}</p>
+          <p>Executed: {scoring.executedAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} at {scoring.executedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
         </div>
       </div>
     </div>

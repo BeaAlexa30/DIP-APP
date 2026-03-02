@@ -330,7 +330,7 @@ export default async function ProjectDashboard({
         <p className="font-medium text-gray-500 mb-1">Audit Trail</p>
         <p>Score Run ID: <span className="font-mono">{scoreRun.id}</span></p>
         <p>Checksum (SHA-256): <span className="font-mono">{scoreRun.checksum}</span></p>
-        <p>Framework Version: {scoreRun.framework_version} · Executed: {new Date(scoreRun.executed_at).toISOString()}</p>
+        <p>Framework Version: {scoreRun.framework_version} · Executed: {new Date(scoreRun.executed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} at {new Date(scoreRun.executed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
       </div>
     </div>
   )

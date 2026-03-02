@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
     // Auto-generate AI insights after successful scoring
     try {
-      const insightsRes = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/intelligence/create-analysis`, {
+      const insightsRes = await fetch(`${req.nextUrl.origin}/api/intelligence/create-analysis`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
