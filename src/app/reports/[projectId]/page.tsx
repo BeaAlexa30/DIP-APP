@@ -129,15 +129,15 @@ export default async function ReportPage({
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header bar */}
-      <div className="bg-white border-b border-gray-200 px-8 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-8 py-4">
+        <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Report — {project.client_name}</h1>
             <p className="text-xs text-gray-400 mt-0.5">
               Framework v{scoring.frameworkVersion} · {scoring.responseCount} responses
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             {isAdmin && (
               <ShareReportButton
                 projectId={project.id}
@@ -159,9 +159,9 @@ export default async function ReportPage({
       </div>
 
       {/* Report Preview */}
-      <div className="max-w-4xl mx-auto px-8 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-8 py-6 sm:py-8 space-y-6">
         {/* Executive Health */}
-        <div className={`rounded-2xl border p-8 ${
+        <div className={`rounded-2xl border p-5 sm:p-8 ${
           scoring.healthScore >= 75 ? 'bg-green-50 border-green-200' :
           scoring.healthScore >= 50 ? 'bg-yellow-50 border-yellow-200' :
           'bg-red-50 border-red-200'
@@ -206,7 +206,7 @@ export default async function ReportPage({
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-700">Category Breakdown</h2>
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500">Category</th>
@@ -227,7 +227,7 @@ export default async function ReportPage({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
 
         {/* Top Issues */}
@@ -236,7 +236,7 @@ export default async function ReportPage({
             <h2 className="text-sm font-semibold text-gray-700">Ranked Issues — Priority View</h2>
             <p className="text-xs text-gray-400 mt-0.5">Priority = 0.4×Risk + 0.4×Friction + 0.2×Frequency</p>
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500">#</th>
@@ -257,7 +257,7 @@ export default async function ReportPage({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
 
         {/* AI Insights — 5-Dimensional Analysis */}

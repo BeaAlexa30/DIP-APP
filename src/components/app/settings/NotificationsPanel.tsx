@@ -78,7 +78,7 @@ export default function NotificationsPanel() {
           <p className="text-gray-400 text-xs mt-1">All accounts have been reviewed.</p>
         </div>
       ) : (
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="border border-gray-200 rounded-xl overflow-x-auto">
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
             <span className="text-sm font-medium text-amber-800">

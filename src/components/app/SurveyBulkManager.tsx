@@ -143,7 +143,7 @@ export default function SurveyBulkManager({ surveysWithData, projectId, projectA
     <div className="relative">
       {/* Selection Toolbar Header */}
       {isAdmin && (
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           {!selectionMode ? (
             <Button
               onClick={() => setSelectionMode(true)}
@@ -154,7 +154,7 @@ export default function SurveyBulkManager({ surveysWithData, projectId, projectA
               ☑ Select Surveys
             </Button>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 onClick={toggleSelectAll}
                 disabled={isBusy}
@@ -199,7 +199,7 @@ export default function SurveyBulkManager({ surveysWithData, projectId, projectA
 
       {/* Sticky Bulk Action Bar — appears when ≥1 selected */}
       {selectionMode && selectedCount > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-white border border-gray-200 shadow-xl rounded-2xl px-5 py-3 backdrop-blur-sm">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-wrap justify-center items-center gap-2 bg-white border border-gray-200 shadow-xl rounded-2xl px-4 py-3 backdrop-blur-sm max-w-[calc(100vw-2rem)]">
           {isBusy ? (
             <span className="text-sm text-gray-700 font-medium">
               {progress!.action} {progress!.done}/{progress!.total}…

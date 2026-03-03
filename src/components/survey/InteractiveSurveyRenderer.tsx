@@ -152,7 +152,7 @@ export default function SurveyFlow({
       <div className="flex-1 flex items-start justify-center px-6 py-10">
         <div className="w-full max-w-xl">
           {current && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-8">
               {/* Category label */}
               <p className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-4">
                 {current.categoryName}
@@ -239,10 +239,10 @@ export default function SurveyFlow({
 
                 // Determine grid class based on scale length
                 let gridClass = 'grid gap-2'
-                if (scaleValues.length === 11) gridClass += ' grid-cols-11'
+                if (scaleValues.length === 11) gridClass += ' grid-cols-6 sm:grid-cols-11'
                 else if (scaleValues.length === 5) gridClass += ' grid-cols-5'
                 else if (scaleValues.length === 6) gridClass += ' grid-cols-6'
-                else if (scaleValues.length <= 10) gridClass += ' grid-cols-10'
+                else if (scaleValues.length <= 10) gridClass += ' grid-cols-5 sm:grid-cols-10'
                 else gridClass = 'flex flex-wrap gap-2' // For 0-100 range
 
                 return (

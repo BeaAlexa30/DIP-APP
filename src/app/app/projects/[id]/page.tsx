@@ -64,10 +64,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const surveyWithScoreRun = surveysWithData.find(s => s.latestScoreRun !== null)
 
   return (
-    <div className="px-8 py-6">
+    <div className="px-4 sm:px-8 py-4 sm:py-6">
       {/* Navigation Bar */}
-      <div className="bg-white rounded-xl border border-gray-200 px-6 py-3 mb-6">
-        <div className="flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-gray-200 px-4 sm:px-6 py-3 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <Link href="/app/projects" className="text-gray-500 hover:text-gray-700 text-sm font-medium transition-colors">
               Projects
@@ -75,7 +75,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <span className="text-gray-300">/</span>
             <span className="text-gray-900 text-sm font-semibold">{project.client_name}</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {surveyWithScoreRun && (
               <Link
                 href={`/app/projects/${project.id}/dashboard?surveyId=${surveyWithScoreRun.survey.id}`}
@@ -110,7 +110,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       )}
 
       {/* Content Container */}
-      <div className="max-w-7xl mx-auto px-6">
+      <div className="max-w-7xl mx-auto">
         {/* Project Header */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">{project.client_name}</h1>

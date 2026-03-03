@@ -97,7 +97,7 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with branding */}
-      <div className="bg-gradient-to-r from-gray-900 to-blue-900 text-white px-8 py-6 border-b-4 border-blue-500">
+      <div className="bg-gradient-to-r from-gray-900 to-blue-900 text-white px-4 sm:px-8 py-4 sm:py-6 border-b-4 border-blue-500">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <div className="bg-blue-500 rounded-full w-12 h-12 flex items-center justify-center">
@@ -108,7 +108,7 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
               <p className="text-blue-200 text-sm">Shareable Report View</p>
             </div>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-lg font-semibold">{project.client_name}</p>
               <p className="text-xs text-blue-200 mt-1">
@@ -130,10 +130,10 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
       </div>
 
       {/* Report Content */}
-      <div className="max-w-6xl mx-auto px-8 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           {/* Executive Health Score */}
-          <div className={`lg:col-span-1 rounded-2xl border p-8 ${
+          <div className={`lg:col-span-1 rounded-2xl border p-5 sm:p-8 ${
             scoring.healthScore >= 75 ? 'bg-green-50 border-green-200' :
             scoring.healthScore >= 50 ? 'bg-yellow-50 border-yellow-200' :
             'bg-red-50 border-red-200'

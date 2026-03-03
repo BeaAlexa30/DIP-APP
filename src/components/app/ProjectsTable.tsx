@@ -490,7 +490,7 @@ export default function ProjectsTable({ projects, isAdmin }: Props) {
       </div>
 
       {/* Table */}
-      <div id="projects-print-area" ref={printRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div id="projects-print-area" ref={printRef} className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         {/* Print header */}
         <div className="print-header" style={{ display: 'none' }}>
           <div className="print-header-left">

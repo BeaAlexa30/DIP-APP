@@ -104,7 +104,7 @@ export default async function AppDashboard() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -134,7 +134,7 @@ export default async function AppDashboard() {
 
       {/* Recent Projects */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700">Recent Projects</h2>
           {canCreate && (
             <Button asChild size="sm">
@@ -148,7 +148,7 @@ export default async function AppDashboard() {
               <Link
                 key={p.id}
                 href={`/app/projects/${p.id}`}
-                className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-between px-4 sm:px-6 py-4 hover:bg-gray-50 transition-colors"
               >
                 <div>
                   <p className="text-sm font-medium text-gray-900">{p.client_name}</p>

@@ -290,7 +290,7 @@ export default function ActivityLogPanel() {
       )}
 
       {/* Table */}
-      <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="border border-gray-200 rounded-xl overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">

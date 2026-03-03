@@ -429,7 +429,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
       )}
 
       {/* Table */}
-      <div id="fw-print-area" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div id="fw-print-area" className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         {/* Print header */}
         <div className="print-header" style={{ display: 'none' }}>
           <div className="print-header-left">

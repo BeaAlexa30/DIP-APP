@@ -52,7 +52,7 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Full-width Navigation Bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
           <div className="flex items-center gap-4">
             <Link
               href={`/app/projects/${projectId}`}
@@ -68,7 +68,7 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
         </div>
 
         {/* Content */}
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <p className="text-gray-400">No survey found for this project</p>
           </div>
@@ -127,8 +127,8 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Full-width Navigation Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-4">
             <Link
               href={`/app/projects/${projectId}`}
