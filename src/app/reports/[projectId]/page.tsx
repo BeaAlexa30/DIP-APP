@@ -1,9 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
-import { createClient, createServiceClient } from '@/lib/supabase/ServerSideDbConnector'
+import { createClient } from '@/lib/supabase/ServerSideDbConnector'
 import type { Database } from '@/types/DatabaseSchemaDefinitions'
 import ReportExportButton from '@/components/reports/ReportDownloadController'
 import ShareReportButton from '@/components/reports/ReportSharingManager'
-import AIInsightsPanel from '@/components/dashboard/AIInsightsPanel'
 import type { ScoringResult } from '@/lib/scoring/AssessmentScoringEngine'
 
 type ScoreResultWithCategory = Database['public']['Tables']['score_results']['Row'] & {
@@ -23,14 +22,6 @@ export default async function ReportPage({
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
-
-  const serviceClient = await createServiceClient()
-  const { data: profile } = await serviceClient
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  const isAdmin = profile?.role === 'admin'
 
   const { data: project } = await supabase
     .from('projects')
@@ -102,8 +93,8 @@ export default async function ReportPage({
     responseCount: scoreRun.response_count,
     executedAt: new Date(scoreRun.executed_at),
     categoryScores: ((categoryResults ?? []) as unknown as ScoreResultWithCategory[]).map(r => ({
-      categoryId: r.category_id,
-      categoryName: r.ai_category_name ?? (r as ScoreResultWithCategory).framework_categories?.name ?? r.category_id ?? '',
+      categoryId: r.category_id ?? 'unknown',
+      categoryName: (r as ScoreResultWithCategory).framework_categories?.name ?? r.category_id ?? 'Uncategorized',
       rawScore: r.raw_score,
       minPossible: r.min_possible,
       maxPossible: r.max_possible,
@@ -129,21 +120,19 @@ export default async function ReportPage({
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header bar */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-8 py-4">
-        <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white border-b border-gray-200 px-8 py-4">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Report — {project.client_name}</h1>
             <p className="text-xs text-gray-400 mt-0.5">
               Framework v{scoring.frameworkVersion} · {scoring.responseCount} responses
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {isAdmin && (
-              <ShareReportButton
-                projectId={project.id}
-                scoreRunId={scoring.scoreRunId}
-              />
-            )}
+          <div className="flex gap-3">
+            <ShareReportButton
+              projectId={project.id}
+              scoreRunId={scoring.scoreRunId}
+            />
             <ReportExportButton
               projectName={project.client_name}
               industry={project.industry}
@@ -152,16 +141,15 @@ export default async function ReportPage({
               scoring={scoring}
               aiInsightSummary={aiInsights?.summary_text ?? undefined}
               aiThemes={Array.isArray(aiInsights?.themes_json) ? aiInsights.themes_json as string[] : undefined}
-              fullAnalysis={(aiInsights?.model_metadata as any)?.fullAnalysis ?? undefined}
             />
           </div>
         </div>
       </div>
 
       {/* Report Preview */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-8 py-6 sm:py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-8 py-8 space-y-6">
         {/* Executive Health */}
-        <div className={`rounded-2xl border p-5 sm:p-8 ${
+        <div className={`rounded-2xl border p-8 ${
           scoring.healthScore >= 75 ? 'bg-green-50 border-green-200' :
           scoring.healthScore >= 50 ? 'bg-yellow-50 border-yellow-200' :
           'bg-red-50 border-red-200'
@@ -206,7 +194,7 @@ export default async function ReportPage({
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-700">Category Breakdown</h2>
           </div>
-          <div className="overflow-x-auto"><table className="w-full text-sm">
+          <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500">Category</th>
@@ -218,7 +206,7 @@ export default async function ReportPage({
             </thead>
             <tbody className="divide-y divide-gray-50">
               {scoring.categoryScores.map(cs => (
-                <tr key={cs.categoryId ?? cs.categoryName}>
+                <tr key={cs.categoryId}>
                   <td className="px-6 py-3 text-gray-700">{cs.categoryName}</td>
                   <td className="px-6 py-3 text-right text-gray-500">{cs.rawScore.toFixed(2)}</td>
                   <td className="px-6 py-3 text-right text-gray-400">{cs.minPossible.toFixed(2)}</td>
@@ -227,7 +215,7 @@ export default async function ReportPage({
                 </tr>
               ))}
             </tbody>
-          </table></div>
+          </table>
         </div>
 
         {/* Top Issues */}
@@ -236,7 +224,7 @@ export default async function ReportPage({
             <h2 className="text-sm font-semibold text-gray-700">Ranked Issues — Priority View</h2>
             <p className="text-xs text-gray-400 mt-0.5">Priority = 0.4×Risk + 0.4×Friction + 0.2×Frequency</p>
           </div>
-          <div className="overflow-x-auto"><table className="w-full text-sm">
+          <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500">#</th>
@@ -257,38 +245,28 @@ export default async function ReportPage({
                 </tr>
               ))}
             </tbody>
-          </table></div>
+          </table>
         </div>
 
-        {/* AI Insights — 5-Dimensional Analysis */}
-        {aiInsights ? (() => {
-          const meta = aiInsights.model_metadata as any
-          const full = meta?.fullAnalysis
-          const isFallback = meta?.isFallback === true || meta?.model === 'deterministic-fallback'
-          const tabs = [
-            { key: 'descriptive',  label: 'What happened?',     icon: '📊' },
-            { key: 'diagnostic',   label: 'Why?',               icon: '🔍' },
-            { key: 'predictive',   label: 'What might happen?', icon: '🔮' },
-            { key: 'prescriptive', label: 'What to do?',        icon: '🎯' },
-            { key: 'kpi',          label: 'KPI View',            icon: '📈' },
-          ]
-          return (
-            <AIInsightsPanel
-              aiInsights={aiInsights}
-              full={full}
-              isFallback={isFallback}
-              tabs={tabs}
-              scoreRunId={scoring.scoreRunId}
-            />
-          )
-        })() : null}
+        {/* AI Insights */}
+        {aiInsights && (
+          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-8">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xl">✨</span>
+              <h2 className="text-base font-semibold text-purple-800">AI-Generated Insights</h2>
+              <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded-full font-medium">Non-Scoring</span>
+            </div>
+            <p className="text-xs text-purple-400 italic mb-5">AI-generated content for reference only. Does not affect scoring.</p>
+            <p className="text-sm text-purple-900 leading-8 tracking-wide break-words">{aiInsights.summary_text}</p>
+          </div>
+        )}
 
         {/* Audit */}
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-400 font-mono">
           <p>Score Run: {scoring.scoreRunId}</p>
           <p>Checksum: {scoring.checksum}</p>
           <p>Framework: v{scoring.frameworkVersion}</p>
-          <p>Executed: {scoring.executedAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} at {scoring.executedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+          <p>Executed: {scoring.executedAt.toISOString()}</p>
         </div>
       </div>
     </div>

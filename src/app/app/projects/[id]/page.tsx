@@ -164,7 +164,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
             {/* Project Actions */}
             <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
-              <ProjectActions project={project} surveyCount={surveys.length} />
+              <ProjectActions project={project} />
             </div>
           </div>
         </div>
