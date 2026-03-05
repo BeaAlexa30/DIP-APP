@@ -35,9 +35,20 @@ interface SurveyCardProps {
   projectId: string
   responseCount: number
   latestScoreRun: ScoreRun | null
+  projectArchived: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
 }
 
-export default function SurveyCard({ survey, projectId, responseCount, latestScoreRun }: SurveyCardProps) {
+export default function SurveyCard({ 
+  survey, 
+  projectId, 
+  responseCount, 
+  latestScoreRun, 
+  projectArchived, 
+  selected, 
+  onToggleSelect 
+}: SurveyCardProps) {
   const router = useRouter()
   const [tokenCopied, setTokenCopied] = useState(false)
   const [loading, setLoading] = useState(false)
