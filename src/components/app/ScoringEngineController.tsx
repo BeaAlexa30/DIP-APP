@@ -1,19 +1,18 @@
 'use client'
 
-import { useCan } from '@/components/app/UserProfileProvider'
-import { Button } from '@/components/ui/button'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useCan } from '@/components/app/UserProfileProvider'
 
 interface Props {
   surveyId: string
+  projectId: string
   frameworkVersion: string
   lastRunAt: string | null
-  responseCount?: number
-  previousResponseCount?: number
 }
 
-export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt, responseCount, previousResponseCount }: Props) {
+export default function ScoreRunTrigger({ surveyId, projectId, frameworkVersion, lastRunAt }: Props) {
   const router = useRouter()
   const canRunScoring = useCan('runScoring')
   const [loading, setLoading] = useState(false)
@@ -51,15 +50,6 @@ export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt,
     router.refresh()
   }
 
-  // Disable recompute if no new responses since the last run
-  const hasNoNewResponses =
-    lastRunAt !== null &&
-    responseCount !== undefined &&
-    previousResponseCount !== undefined &&
-    responseCount === previousResponseCount
-
-  const isDisabled = loading || hasNoNewResponses
-
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="flex items-start justify-between mb-4">
@@ -86,12 +76,6 @@ export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt,
         </div>
       )}
 
-      {hasNoNewResponses && (
-        <div className="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
-          No new responses since the last score run. Recompute is disabled until new responses are submitted.
-        </div>
-      )}
-
       <div className="text-xs text-gray-500 mb-4 space-y-1">
         <p>• Framework v{frameworkVersion}</p>
         <p>• Category scores normalized 0–100</p>
@@ -100,19 +84,24 @@ export default function ScoreRunTrigger({ surveyId, frameworkVersion, lastRunAt,
         <p>• All runs checksummed for audit trail</p>
       </div>
 
-      <Button
+      <button
         onClick={handleRun}
-        disabled={isDisabled}
-        title={hasNoNewResponses ? 'No new responses since last run' : undefined}
-        variant="secondary"
-        className="w-full bg-gray-900 text-white hover:bg-gray-700 rounded-lg"
+        disabled={true}
+        title="Scoring engine is currently disabled"
+        className="w-full bg-gray-400 text-white text-sm font-medium py-2.5 rounded-lg cursor-not-allowed disabled:opacity-50 transition-colors"
       >
-        {hasNoNewResponses ? 'No new responses — up to date'
-          : loading ? 'Running Scoring Engine…'
-            : lastRunAt ? 'Recompute Scores'
-              : 'Run Scoring Engine'
-        }
-      </Button>
+        Run Scoring Engine (Disabled)
+      </button>
+
+      {/* View Decision Dashboard button (shown after first run) */}
+      {lastRunAt && (
+        <Link
+          href={`/app/projects/${projectId}/dashboard?surveyId=${surveyId}`}
+          className="mt-3 w-full block text-center bg-[#00B3B0] text-white text-sm font-medium py-2.5 rounded-lg hover:bg-[#009E9B] transition-colors"
+        >
+          View Decision Dashboard →
+        </Link>
+      )}
     </div>
   )
 }

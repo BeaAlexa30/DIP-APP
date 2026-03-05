@@ -148,18 +148,11 @@ export default function DashboardAutoInsights({ payload }: Props) {
           </div>
           <Button
             onClick={generate}
-            disabled={loading}
-            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 rounded-lg whitespace-nowrap"
+            disabled={true}
+            title="This feature is currently disabled"
+            className="flex items-center gap-2 bg-gray-400 hover:bg-gray-400 rounded-lg whitespace-nowrap cursor-not-allowed"
           >
-            {loading ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
-                Analyzing...
-              </>
-            ) : 'Generate Insights'}
+            Generate Insights (Disabled)
           </Button>
         </div>
       ) : insight && cfg ? (

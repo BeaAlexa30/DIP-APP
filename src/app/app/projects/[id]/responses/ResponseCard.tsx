@@ -24,6 +24,20 @@ interface ResponseCardProps {
   optionsMap: Record<string, string>
 }
 
+// Helper function to format raw value keys into human-readable text
+function formatValueKey(valueKey: string): string {
+  // If it's a number (scale rating), return as is
+  if (!isNaN(Number(valueKey))) {
+    return valueKey
+  }
+  
+  // Convert snake_case to Title Case
+  return valueKey
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
 export default function ResponseCard({ response, responseNumber, optionsMap }: ResponseCardProps) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -46,7 +60,7 @@ export default function ResponseCard({ response, responseNumber, optionsMap }: R
           <div>
             <h3 className="font-semibold text-gray-900">Response #{responseNumber}</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              Submitted:{' '}
+              Submitted{' '}
               {new Date(response.submitted_at).toLocaleString('en-US', {
                 year: 'numeric',
                 month: '2-digit',
@@ -58,7 +72,7 @@ export default function ResponseCard({ response, responseNumber, optionsMap }: R
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400">{response.response_answers.length} answers</span>
+            <span className="text-xs text-gray-400">{response.response_answers.length} {response.response_answers.length === 1 ? 'answer' : 'answers'}</span>
             <svg
               className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
               fill="none"
@@ -83,14 +97,14 @@ export default function ResponseCard({ response, responseNumber, optionsMap }: R
                 {answers.map((answer) => (
                   <div key={answer.id} className="pl-4">
                     <p className="text-sm text-gray-600 mb-1">
-                      {answer.framework_questions?.prompt ?? 'Unknown question'}
+                      {answer.framework_questions?.prompt ?? 'Question not available'}
                     </p>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-400">Answer:</span>
+                    <div className="flex items-start gap-3">
+                      <span className="text-xs text-gray-400 mt-0.5">Response:</span>
                       <span className="text-sm font-medium text-gray-900">
                         {answer.option_value_key
-                          ? (optionsMap[`${answer.question_id}:${answer.option_value_key}`] ?? answer.option_value_key)
-                          : answer.free_text ?? 'No answer'}
+                          ? (optionsMap[`${answer.question_id}:${answer.option_value_key}`] ?? formatValueKey(answer.option_value_key))
+                          : answer.free_text ?? 'No response provided'}
                       </span>
                     </div>
                   </div>

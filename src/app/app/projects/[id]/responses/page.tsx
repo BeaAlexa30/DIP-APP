@@ -7,7 +7,8 @@ import ResponseCard from './ResponseCard'
 type Response = Database['public']['Tables']['responses']['Row']
 type ResponseAnswer = Database['public']['Tables']['response_answers']['Row']
 
-interface ResponseWithAnswers extends Response {
+interface ResponseWithAnswers extends Omit<Response, 'respondent_meta'> {
+  respondent_meta: any
   response_answers: (ResponseAnswer & {
     framework_questions: {
       prompt: string
@@ -19,8 +20,15 @@ interface ResponseWithAnswers extends Response {
   })[]
 }
 
-export default async function ResponsesPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ResponsesPage({ 
+  params,
+  searchParams 
+}: { 
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ surveyId?: string }>
+}) {
   const { id: projectId } = await params
+  const { surveyId: querySurveyId } = await searchParams
   const serviceClient = await createServiceClient()
 
   // Get project
@@ -34,17 +42,39 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
 
   if (!project) notFound()
 
-  // Get latest survey for this project
-  const { data: surveysData } = await serviceClient
-    .from('surveys')
-    .select('id, created_at, pack_version_snapshot')
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: false })
-    .limit(1)
+  // Get survey - either from query param or latest survey for this project
+  let surveyId: string | undefined
+  let snapshot: { packName?: string; version?: string } | undefined
+  
+  if (querySurveyId) {
+    // Use the specific survey from query param
+    const { data: surveyData } = await serviceClient
+      .from('surveys')
+      .select('id, pack_version_snapshot')
+      .eq('id', querySurveyId)
+      .eq('project_id', projectId)
+      .single()
+    
+    if (surveyData) {
+      surveyId = surveyData.id
+      snapshot = surveyData.pack_version_snapshot as { packName?: string; version?: string } | undefined
+    }
+  }
+  
+  if (!surveyId) {
+    // Fallback to latest survey
+    const { data: surveysData } = await serviceClient
+      .from('surveys')
+      .select('id, created_at, pack_version_snapshot')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(1)
 
-  const surveys = surveysData as { id: string; created_at: string; pack_version_snapshot: Record<string, unknown> }[] | null
-  const surveyId = surveys?.[0]?.id
-  const snapshot = surveys?.[0]?.pack_version_snapshot as { packName?: string; version?: string } | undefined
+    const surveys = surveysData as { id: string; created_at: string; pack_version_snapshot: Record<string, unknown> }[] | null
+    surveyId = surveys?.[0]?.id
+    snapshot = surveys?.[0]?.pack_version_snapshot as { packName?: string; version?: string } | undefined
+  }
+  
   const frameworkName = snapshot?.packName ?? 'Framework'
   const frameworkVersion = snapshot?.version ?? ''
 
@@ -52,11 +82,11 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Full-width Navigation Bar */}
-        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center gap-4">
-            <Link
-              href={`/app/projects/${projectId}`}
-              className="text-[#009E9B] hover:text-[#00B3B0] text-sm font-medium flex items-center gap-2"
+            <Link 
+              href={`/app/projects/${projectId}`} 
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-2"
             >
               ← Back to Project
             </Link>
@@ -66,11 +96,12 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
             </div>
           </div>
         </div>
-
+        
         {/* Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <p className="text-gray-400">No survey found for this project</p>
+            <p className="text-gray-400">No survey found for this project.</p>
+            <p className="text-gray-400 text-sm mt-2">Please create a survey first to collect responses.</p>
           </div>
         </div>
       </div>
@@ -78,6 +109,7 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
   }
 
   // Get all responses with answers and question details
+  // Note: Answers can be in response_answers table OR in respondent_meta.ai_survey_answers JSONB
   const { data: responses, error: responsesError } = await serviceClient
     .from('responses')
     .select(`
@@ -97,6 +129,31 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
     .order('submitted_at', { ascending: false })
 
   const typedResponses = (responses ?? []) as unknown as ResponseWithAnswers[]
+
+  // Process responses to merge answers from both sources:
+  // 1. response_answers table
+  // 2. respondent_meta.ai_survey_answers JSONB field
+  for (const resp of typedResponses) {
+    const meta = resp.respondent_meta as any
+    if (meta?.ai_survey_answers && Array.isArray(meta.ai_survey_answers)) {
+      // Convert JSONB answers to match response_answers format
+      const jsonbAnswers = meta.ai_survey_answers.map((ans: any) => ({
+        id: `jsonb-${resp.id}-${ans.questionId}`,
+        question_id: ans.questionId,
+        response_id: resp.id,
+        option_value_key: ans.valueKey ?? null,
+        free_text: ans.freeText ?? null,
+        created_at: resp.submitted_at,
+        framework_questions: {
+          prompt: ans.questionPrompt ?? 'Survey Question',
+          category_id: 'general',
+          framework_categories: { name: 'General' }
+        }
+      }))
+      // Merge with existing response_answers
+      resp.response_answers = [...resp.response_answers, ...jsonbAnswers]
+    }
+  }
 
   // Collect all unique question IDs from the fetched answers so we can resolve option labels
   const allQuestionIds = new Set<string>()
@@ -127,11 +184,11 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Full-width Navigation Bar */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href={`/app/projects/${projectId}`}
+            <Link 
+              href={`/app/projects/${projectId}`} 
               className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-2"
             >
               ← Back to Project
@@ -164,7 +221,8 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
         {/* Responses List */}
         {typedResponses.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <p className="text-gray-400">No responses yet</p>
+            <p className="text-gray-500 font-medium">No responses yet</p>
+            <p className="text-gray-400 text-sm mt-2">Responses will appear here once participants submit the survey.</p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -177,7 +235,7 @@ export default async function ResponsesPage({ params }: { params: Promise<{ id: 
               />
             ))}
           </div>
-        )}
+      )}
       </div>
     </div>
   )
