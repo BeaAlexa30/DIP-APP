@@ -18,7 +18,7 @@ interface SurveyToken {
 interface Survey {
   id: string
   status: string
-  pack_id: string
+  pack_id: string | null
   pack_version_snapshot: any
   survey_tokens: SurveyToken[]
 }

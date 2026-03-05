@@ -41,10 +41,11 @@ export default function SurveyFlow({
 
   const isAnswered = (q: Question) => {
     if (!q.required) return true
-    return !!answers[q.id]
+    const answer = answers[q.id]
+    return answer !== undefined && answer !== null && answer.trim() !== ''
   }
 
-  const canAdvance = !current?.required || !!answers[current?.id]
+  const canAdvance = !current?.required || isAnswered(current)
 
   const handleAnswer = (questionId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
@@ -65,22 +66,24 @@ export default function SurveyFlow({
     setError(null)
 
     const completionTime = Math.round((Date.now() - startTime) / 1000)
-    const aiSurvey = isAiSurvey || snapshot.ai_generated
+    const aiSurvey = isAiSurvey || snapshot.ai_generated || (snapshot as any).custom_survey
 
     const endpoint = aiSurvey
       ? '/api/assessments/submit-ai-response'
       : '/api/assessments/submit-response'
 
-    // For AI surveys include prompt text + free_text support; for standard use valueKey only
+    // For AI/custom surveys include prompt text + free_text support; for standard use valueKey only
+    const textTypes = ['text', 'textarea', 'long_text', 'short_text', 'email', 'url', 'number']
     const answerRows = allQuestions
-      .filter(q => answers[q.id] !== undefined)
+      .filter(q => answers[q.id] !== undefined && answers[q.id] !== null && answers[q.id].trim() !== '')
       .map(q => {
         if (aiSurvey) {
+          const isTextType = textTypes.includes(q.type)
           return {
             questionId: q.id,
             questionPrompt: q.prompt,
-            valueKey: q.type !== 'text' ? answers[q.id] : undefined,
-            freeText: q.type === 'text' ? answers[q.id] : undefined,
+            valueKey: !isTextType ? answers[q.id] : undefined,
+            freeText: isTextType ? answers[q.id] : undefined,
           }
         }
         return { questionId: q.id, valueKey: answers[q.id] }
@@ -164,15 +167,15 @@ export default function SurveyFlow({
                 {current.required && <span className="text-red-400 ml-1">*</span>}
               </h2>
 
-              {/* Options - Single Select */}
-              {current.type === 'single_select' && (
+              {/* Options - Single Select (Radio) */}
+              {(current.type === 'single_select' || current.type === 'radio' || current.type === 'multiple_choice') && (
                 <div className="space-y-2">
                   {current.options.sort((a, b) => a.order - b.order).map(opt => (
                     <Button
                       key={opt.value_key}
                       onClick={() => handleAnswer(current.id, opt.value_key)}
                       variant={answers[current.id] === opt.value_key ? 'default' : 'outline'}
-                      className="w-full text-left px-4 py-3 rounded-xl text-sm transition-all"
+                      className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
                     >
                       {opt.label}
                     </Button>
@@ -180,8 +183,52 @@ export default function SurveyFlow({
                 </div>
               )}
 
+              {/* Checkboxes - Multiple Select */}
+              {(current.type === 'checkbox' || current.type === 'checkboxes') && (
+                <div className="space-y-2">
+                  {current.options.sort((a, b) => a.order - b.order).map(opt => {
+                    const currentAnswers = answers[current.id]?.split(',') || []
+                    const isSelected = currentAnswers.includes(opt.value_key)
+                    return (
+                      <Button
+                        key={opt.value_key}
+                        onClick={() => {
+                          let newAnswers: string[]
+                          if (isSelected) {
+                            newAnswers = currentAnswers.filter(a => a !== opt.value_key)
+                          } else {
+                            newAnswers = [...currentAnswers, opt.value_key]
+                          }
+                          handleAnswer(current.id, newAnswers.join(','))
+                        }}
+                        variant={isSelected ? 'default' : 'outline'}
+                        className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
+                      >
+                        {opt.label}
+                      </Button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Dropdown Select */}
+              {current.type === 'dropdown' && (
+                <select
+                  value={answers[current.id] ?? ''}
+                  onChange={e => handleAnswer(current.id, e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Select an option...</option>
+                  {current.options.sort((a, b) => a.order - b.order).map(opt => (
+                    <option key={opt.value_key} value={opt.value_key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {/* Scale Questions - Numeric Rating */}
-              {current.type === 'scale' && (() => {
+              {(current.type === 'scale' || current.type === 'linear_scale') && (() => {
                 // Use snapshot fields if available (AI surveys), else parse from prompt
                 let min: number
                 let max: number
@@ -267,8 +314,8 @@ export default function SurveyFlow({
                 )
               })()}
 
-              {/* Text Input */}
-              {current.type === 'text' && (
+              {/* Long Text Input / Textarea */}
+              {(current.type === 'text' || current.type === 'textarea' || current.type === 'long_text') && (
                 <textarea
                   rows={4}
                   value={answers[current.id] ?? ''}
@@ -276,6 +323,86 @@ export default function SurveyFlow({
                   placeholder="Type your answer here…"
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
+              )}
+
+              {/* Short Text Input */}
+              {current.type === 'short_text' && (
+                <input
+                  type="text"
+                  value={answers[current.id] ?? ''}
+                  onChange={e => handleAnswer(current.id, e.target.value)}
+                  placeholder="Type your answer…"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {/* Email Input */}
+              {current.type === 'email' && (
+                <input
+                  type="email"
+                  value={answers[current.id] ?? ''}
+                  onChange={e => handleAnswer(current.id, e.target.value)}
+                  placeholder="email@example.com"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {/* URL Input */}
+              {current.type === 'url' && (
+                <input
+                  type="url"
+                  value={answers[current.id] ?? ''}
+                  onChange={e => handleAnswer(current.id, e.target.value)}
+                  placeholder="https://example.com"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {/* Date Input */}
+              {current.type === 'date' && (
+                <input
+                  type="date"
+                  value={answers[current.id] ?? ''}
+                  onChange={e => handleAnswer(current.id, e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {/* Time Input */}
+              {current.type === 'time' && (
+                <input
+                  type="time"
+                  value={answers[current.id] ?? ''}
+                  onChange={e => handleAnswer(current.id, e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {/* Number Input */}
+              {current.type === 'number' && (
+                <input
+                  type="number"
+                  value={answers[current.id] ?? ''}
+                  onChange={e => handleAnswer(current.id, e.target.value)}
+                  placeholder="Enter a number…"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
+
+              {/* Yes/No Radio */}
+              {current.type === 'yes_no' && (
+                <div className="space-y-2">
+                  {['Yes', 'No'].map(opt => (
+                    <Button
+                      key={opt.toLowerCase()}
+                      onClick={() => handleAnswer(current.id, opt.toLowerCase())}
+                      variant={answers[current.id] === opt.toLowerCase() ? 'default' : 'outline'}
+                      className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
+                    >
+                      {opt}
+                    </Button>
+                  ))}
+                </div>
               )}
 
               {error && (

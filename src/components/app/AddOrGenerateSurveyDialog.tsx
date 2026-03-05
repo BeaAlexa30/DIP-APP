@@ -59,9 +59,22 @@ interface Props {
   existingPackIds: string[]
 }
 
-type Tab = 'recommend' | 'generate'
+type Tab = 'recommend' | 'generate' | 'custom'
 type RecommendState = 'idle' | 'loading' | 'done' | 'error'
 type GenerateStep = 'form' | 'generating' | 'done' | 'error'
+type QuestionType = 'short_text' | 'long_text' | 'multiple_choice' | 'checkboxes' | 'dropdown' | 'linear_scale' | 'yes_no' | 'email' | 'url' | 'date' | 'time' | 'number'
+
+interface CustomQuestion {
+  id: string
+  type: QuestionType
+  prompt: string
+  required: boolean
+  options?: string[] // for multiple_choice, checkboxes, dropdown
+  scaleMin?: number // for linear_scale
+  scaleMax?: number // for linear_scale
+  minLabel?: string // for linear_scale
+  maxLabel?: string // for linear_scale
+}
 
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -95,6 +108,14 @@ export default function AddOrGenerateSurveyDialog({
   const [genResult, setGenResult]       = useState<GenerateResult | null>(null)
   const [genError, setGenError]         = useState<string | null>(null)
   const [copied, setCopied]             = useState(false)
+
+  // — Custom Survey state —
+  const [customSurveyTitle, setCustomSurveyTitle] = useState('')
+  const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([])
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
+  const [customSaving, setCustomSaving] = useState(false)
+  const [customError, setCustomError] = useState<string | null>(null)
+  const [customSuccess, setCustomSuccess] = useState(false)
 
   const availablePacks = packs.filter(p =>
     !existingPackIds.includes(p.id) && !addedPackIds.has(p.id)
@@ -241,6 +262,151 @@ export default function AddOrGenerateSurveyDialog({
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // ── Custom Survey Functions ───────────────────────────────────────────────────
+  function addCustomQuestion(type: QuestionType) {
+    const newQuestion: CustomQuestion = {
+      id: `q-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type,
+      prompt: '',
+      required: false,
+      ...(type === 'multiple_choice' || type === 'checkboxes' || type === 'dropdown' ? { options: ['Option 1', 'Option 2'] } : {}),
+      ...(type === 'linear_scale' ? { scaleMin: 1, scaleMax: 5, minLabel: 'Low', maxLabel: 'High' } : {}),
+    }
+    setCustomQuestions(prev => [...prev, newQuestion])
+    setEditingQuestionId(newQuestion.id)
+  }
+
+  function removeCustomQuestion(id: string) {
+    setCustomQuestions(prev => prev.filter(q => q.id !== id))
+    if (editingQuestionId === id) setEditingQuestionId(null)
+  }
+
+  function updateCustomQuestion(id: string, updates: Partial<CustomQuestion>) {
+    setCustomQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q))
+  }
+
+  function moveQuestionUp(index: number) {
+    if (index === 0) return
+    setCustomQuestions(prev => {
+      const newList = [...prev]
+      ;[newList[index - 1], newList[index]] = [newList[index], newList[index - 1]]
+      return newList
+    })
+  }
+
+  function moveQuestionDown(index: number) {
+    if (index === customQuestions.length - 1) return
+    setCustomQuestions(prev => {
+      const newList = [...prev]
+      ;[newList[index], newList[index + 1]] = [newList[index + 1], newList[index]]
+      return newList
+    })
+  }
+
+  async function handleSaveCustomSurvey() {
+    if (!customSurveyTitle.trim() || customQuestions.length === 0) return
+    
+    // Validate all questions have prompts
+    const invalidQuestions = customQuestions.filter(q => !q.prompt.trim())
+    if (invalidQuestions.length > 0) {
+      setCustomError('All questions must have a prompt text.')
+      return
+    }
+
+    setCustomSaving(true)
+    setCustomError(null)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated.')
+
+      // Create snapshot for custom survey
+      const snapshot = {
+        packName: customSurveyTitle,
+        version: `custom-${Date.now()}`,
+        ai_generated: false,
+        custom_survey: true,
+        categories: [{
+          id: 'custom-category',
+          name: 'Survey Questions',
+          order: 1,
+          questions: customQuestions.map((q, idx) => ({
+            id: q.id,
+            type: q.type, // Keep original type - renderer handles all types
+            prompt: q.prompt,
+            required: q.required,
+            order: idx + 1,
+            ...(q.options ? { options: q.options.map((opt, optIdx) => ({
+              id: `${q.id}-opt-${optIdx}`,
+              label: opt,
+              value_key: opt.toLowerCase().replace(/\s+/g, '_'),
+              order: optIdx + 1
+            })) } : {}),
+            ...(q.type === 'linear_scale' ? {
+              scaleMin: q.scaleMin ?? 1,
+              scaleMax: q.scaleMax ?? 5,
+              minLabel: q.minLabel,
+              maxLabel: q.maxLabel
+            } : {}),
+          }))
+        }]
+      }
+
+      // Create survey
+      const { data: survey, error: surveyErr } = await (supabase as any)
+        .from('surveys')
+        .insert({
+          project_id: projectId,
+          pack_id: null, // Custom survey has no pack_id
+          pack_version_snapshot: snapshot,
+          status: 'published',
+        })
+        .select()
+        .single()
+      
+      if (surveyErr) {
+        console.error('Survey creation error:', surveyErr)
+        // Show detailed error to user
+        throw new Error(`Database error: ${surveyErr?.message || 'Failed to create survey'}\n\nIf you see "null value in column pack_id" or "violates not-null constraint", you need to run the database migration to allow custom surveys.`)
+      }
+      if (!survey) throw new Error('Failed to create survey.')
+
+      console.log('✅ Custom survey created successfully:', survey.id)
+      console.log('Survey data:', survey)
+
+      // Create token
+      const token = Array.from(globalThis.crypto.getRandomValues(new Uint8Array(24)))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+      const { error: tokenErr } = await (supabase as any).from('survey_tokens').insert({
+        survey_id: survey.id,
+        token,
+        max_responses: null,
+        expires_at: null,
+      })
+
+      if (tokenErr) {
+        console.error('Token creation error:', tokenErr)
+        throw new Error(tokenErr?.message ?? 'Failed to create survey token.')
+      }
+
+      console.log('✅ Token created successfully')
+      
+      setCustomSuccess(true)
+      
+      // Force page refresh after short delay
+      setTimeout(() => {
+        console.log('Refreshing page to show new survey...')
+        router.refresh()
+        handleClose()
+      }, 1500)
+    } catch (e: any) {
+      setCustomError(e.message)
+    } finally {
+      setCustomSaving(false)
+    }
+  }
+
   // ── Open/close ────────────────────────────────────────────────────────────────
   function handleOpen() {
     setIsOpen(true)
@@ -250,6 +416,12 @@ export default function AddOrGenerateSurveyDialog({
     setGenResult(null)
     setGenError(null)
     setCopied(false)
+    setCustomSurveyTitle('')
+    setCustomQuestions([])
+    setEditingQuestionId(null)
+    setCustomSaving(false)
+    setCustomError(null)
+    setCustomSuccess(false)
     // Reset recommendations if packs changed
     if (recState === 'idle' || addedPackIds.size > 0) {
       setRecommendations([])
@@ -321,6 +493,16 @@ export default function AddOrGenerateSurveyDialog({
                 }`}
               >
                 Generate New Survey
+              </button>
+              <button
+                onClick={() => setTab('custom')}
+                className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                  tab === 'custom'
+                    ? 'border-violet-600 text-violet-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Create Custom
               </button>
             </div>
 
@@ -481,11 +663,13 @@ export default function AddOrGenerateSurveyDialog({
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-gray-800 mb-1.5">
+                        <label htmlFor="project-overview" className="block text-sm font-semibold text-gray-800 mb-1.5">
                           Project Overview <span className="text-red-400">*</span>
                         </label>
                         <p className="text-xs text-gray-500 mb-2">Describe what the project is about, its goals, and context.</p>
                         <textarea
+                          id="project-overview"
+                          name="projectOverview"
                           rows={4}
                           value={projectOverview}
                           onChange={e => setProjectOverview(e.target.value)}
@@ -497,11 +681,13 @@ export default function AddOrGenerateSurveyDialog({
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-gray-800 mb-1.5">
+                        <label htmlFor="target-respondents" className="block text-sm font-semibold text-gray-800 mb-1.5">
                           Target Respondents <span className="text-red-400">*</span>
                         </label>
                         <p className="text-xs text-gray-500 mb-2">Who will answer this survey?</p>
                         <textarea
+                          id="target-respondents"
+                          name="targetRespondents"
                           rows={3}
                           value={targetRespondents}
                           onChange={e => setTargetRespondents(e.target.value)}
@@ -513,11 +699,13 @@ export default function AddOrGenerateSurveyDialog({
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-gray-800 mb-1.5">
+                        <label htmlFor="survey-benefit" className="block text-sm font-semibold text-gray-800 mb-1.5">
                           Benefit / Purpose of the Survey <span className="text-red-400">*</span>
                         </label>
                         <p className="text-xs text-gray-500 mb-2">What will we learn from this survey?</p>
                         <textarea
+                          id="survey-benefit"
+                          name="surveyBenefit"
                           rows={3}
                           value={surveyBenefit}
                           onChange={e => setSurveyBenefit(e.target.value)}
@@ -631,6 +819,138 @@ export default function AddOrGenerateSurveyDialog({
                 </>
               )}
 
+              {/* ══════════ TAB: Create Custom Survey ══════════ */}
+              {tab === 'custom' && (
+                <>
+                  {!customSuccess ? (
+                    <>
+                      {/* Survey Title */}
+                      <div>
+                        <label htmlFor="custom-survey-title" className="block text-sm font-semibold text-gray-800 mb-2">
+                          Survey Title <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                          id="custom-survey-title"
+                          name="customSurveyTitle"
+                          type="text"
+                          value={customSurveyTitle}
+                          onChange={e => setCustomSurveyTitle(e.target.value)}
+                          placeholder="e.g., Customer Satisfaction Survey"
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                        />
+                      </div>
+
+                      {/* Questions List */}
+                      {customQuestions.length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Questions ({customQuestions.length})
+                          </p>
+                          {customQuestions.map((question, index) => (
+                            <QuestionEditor
+                              key={question.id}
+                              question={question}
+                              index={index}
+                              isEditing={editingQuestionId === question.id}
+                              onEdit={() => setEditingQuestionId(question.id)}
+                              onUpdate={(updates) => updateCustomQuestion(question.id, updates)}
+                              onRemove={() => removeCustomQuestion(question.id)}
+                              onMoveUp={() => moveQuestionUp(index)}
+                              onMoveDown={() => moveQuestionDown(index)}
+                              canMoveUp={index > 0}
+                              canMoveDown={index < customQuestions.length - 1}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add Question Buttons */}
+                      <div className="border-t border-gray-100 pt-4">
+                        <p className="text-xs font-semibold text-gray-600 mb-3">Add Question Type:</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button onClick={() => addCustomQuestion('short_text')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            📝 Short Text
+                          </button>
+                          <button onClick={() => addCustomQuestion('long_text')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            📄 Long Text
+                          </button>
+                          <button onClick={() => addCustomQuestion('multiple_choice')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            ⭕ Multiple Choice
+                          </button>
+                          <button onClick={() => addCustomQuestion('checkboxes')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            ☑️ Checkboxes
+                          </button>
+                          <button onClick={() => addCustomQuestion('dropdown')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            🔽 Dropdown
+                          </button>
+                          <button onClick={() => addCustomQuestion('linear_scale')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            📊 Linear Scale
+                          </button>
+                          <button onClick={() => addCustomQuestion('yes_no')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            ✓✗ Yes/No
+                          </button>
+                          <button onClick={() => addCustomQuestion('email')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            ✉️ Email
+                          </button>
+                          <button onClick={() => addCustomQuestion('url')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            🔗 URL
+                          </button>
+                          <button onClick={() => addCustomQuestion('date')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            📅 Date
+                          </button>
+                          <button onClick={() => addCustomQuestion('time')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            🕐 Time
+                          </button>
+                          <button onClick={() => addCustomQuestion('number')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                            🔢 Number
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Error Display */}
+                      {customError && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+                          {customError}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-2 border-t border-gray-100">
+                        <button
+                          onClick={handleClose}
+                          disabled={customSaving}
+                          className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveCustomSurvey}
+                          disabled={!customSurveyTitle.trim() || customQuestions.length === 0 || customSaving}
+                          className="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+                        >
+                          {customSaving ? (
+                            <>
+                              <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block" />
+                              Creating Survey…
+                            </>
+                          ) : (
+                            <>💾 Create Survey ({customQuestions.length} questions)</>
+                          )}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <span className="text-3xl">✓</span>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-1">Survey Created!</h3>
+                      <p className="text-sm text-gray-500">Your custom survey has been created successfully.</p>
+                    </div>
+                  )}
+                </>
+              )}
+
             </div>
           </div>
         </div>
@@ -638,3 +958,225 @@ export default function AddOrGenerateSurveyDialog({
     </>
   )
 }
+
+// ── Question Editor Component ──────────────────────────────────────────────────
+interface QuestionEditorProps {
+  question: CustomQuestion
+  index: number
+  isEditing: boolean
+  onEdit: () => void
+  onUpdate: (updates: Partial<CustomQuestion>) => void
+  onRemove: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
+  canMoveUp: boolean
+  canMoveDown: boolean
+}
+
+function QuestionEditor({
+  question,
+  index,
+  isEditing,
+  onEdit,
+  onUpdate,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
+}: QuestionEditorProps) {
+  const questionTypeLabels: Record<QuestionType, string> = {
+    short_text: 'Short Text',
+    long_text: 'Long Text',
+    multiple_choice: 'Multiple Choice',
+    checkboxes: 'Checkboxes',
+    dropdown: 'Dropdown',
+    linear_scale: 'Linear Scale',
+    yes_no: 'Yes/No',
+    email: 'Email',
+    url: 'URL',
+    date: 'Date',
+    time: 'Time',
+    number: 'Number',
+  }
+
+  const addOption = () => {
+    const currentOptions = question.options || []
+    onUpdate({ options: [...currentOptions, `Option ${currentOptions.length + 1}`] })
+  }
+
+  const updateOption = (optIndex: number, value: string) => {
+    const newOptions = [...(question.options || [])]
+    newOptions[optIndex] = value
+    onUpdate({ options: newOptions })
+  }
+
+  const removeOption = (optIndex: number) => {
+    const newOptions = (question.options || []).filter((_, i) => i !== optIndex)
+    onUpdate({ options: newOptions })
+  }
+
+  return (
+    <div className={`border rounded-xl p-4 ${isEditing ? 'border-violet-300 bg-violet-50/30' : 'border-gray-200 bg-white'}`}>
+      <div className="flex items-start gap-3">
+        {/* Question Number */}
+        <div className="shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-sm font-semibold">
+          {index + 1}
+        </div>
+
+        {/* Question Content */}
+        <div className="flex-1 min-w-0 space-y-3">
+          {/* Question Prompt */}
+          <div>
+            <input
+              id={`question-prompt-${question.id}`}
+              name={`questionPrompt_${question.id}`}
+              type="text"
+              value={question.prompt}
+              onChange={e => onUpdate({ prompt: e.target.value })}
+              onFocus={onEdit}
+              placeholder="Enter your question here..."
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+            />
+          </div>
+
+          {/* Question Type Badge */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+              {questionTypeLabels[question.type]}
+            </span>
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+              <input
+                id={`question-required-${question.id}`}
+                name={`questionRequired_${question.id}`}
+                type="checkbox"
+                checked={question.required}
+                onChange={e => onUpdate({ required: e.target.checked })}
+                className="w-3.5 h-3.5 accent-violet-600"
+              />
+              Required
+            </label>
+          </div>
+
+          {/* Options (for multiple_choice, checkboxes, dropdown) */}
+          {(question.type === 'multiple_choice' || question.type === 'checkboxes' || question.type === 'dropdown') && isEditing && (
+            <div className="space-y-2 pl-2 border-l-2 border-violet-200">
+              <p className="text-xs font-medium text-gray-600">Options:</p>
+              {(question.options || []).map((option, optIndex) => (
+                <div key={optIndex} className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">{optIndex + 1}.</span>
+                  <input
+                    id={`option-${question.id}-${optIndex}`}
+                    name={`option_${question.id}_${optIndex}`}
+                    type="text"
+                    value={option}
+                    onChange={e => updateOption(optIndex, e.target.value)}
+                    className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
+                  />
+                  {(question.options || []).length > 2 && (
+                    <button
+                      onClick={() => removeOption(optIndex)}
+                      className="text-red-500 hover:text-red-700 text-xs px-2"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={addOption}
+                className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+              >
+                + Add Option
+              </button>
+            </div>
+          )}
+
+          {/* Scale Settings (for linear_scale) */}
+          {question.type === 'linear_scale' && isEditing && (
+            <div className="space-y-2 pl-2 border-l-2 border-violet-200">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label htmlFor={`scale-min-${question.id}`} className="text-xs text-gray-600">Min Value</label>
+                  <input
+                    id={`scale-min-${question.id}`}
+                    name={`scaleMin_${question.id}`}
+                    type="number"
+                    value={question.scaleMin || 1}
+                    onChange={e => onUpdate({ scaleMin: parseInt(e.target.value) || 1 })}
+                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor={`scale-max-${question.id}`} className="text-xs text-gray-600">Max Value</label>
+                  <input
+                    id={`scale-max-${question.id}`}
+                    name={`scaleMax_${question.id}`}
+                    type="number"
+                    value={question.scaleMax || 5}
+                    onChange={e => onUpdate({ scaleMax: parseInt(e.target.value) || 5 })}
+                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label htmlFor={`scale-min-label-${question.id}`} className="text-xs text-gray-600">Min Label</label>
+                  <input
+                    id={`scale-min-label-${question.id}`}
+                    name={`scaleMinLabel_${question.id}`}
+                    type="text"
+                    value={question.minLabel || ''}
+                    onChange={e => onUpdate({ minLabel: e.target.value })}
+                    placeholder="e.g., Low"
+                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor={`scale-max-label-${question.id}`} className="text-xs text-gray-600">Max Label</label>
+                  <input
+                    id={`scale-max-label-${question.id}`}
+                    name={`scaleMaxLabel_${question.id}`}
+                    type="text"
+                    value={question.maxLabel || ''}
+                    onChange={e => onUpdate({ maxLabel: e.target.value })}
+                    placeholder="e.g., High"
+                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-1 shrink-0">
+          <button
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+            title="Move up"
+          >
+            ↑
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+            title="Move down"
+          >
+            ↓
+          </button>
+          <button
+            onClick={onRemove}
+            className="p-1 text-red-400 hover:text-red-600"
+            title="Remove question"
+          >
+            🗑
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+

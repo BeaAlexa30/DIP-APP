@@ -199,7 +199,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       target_audience: project.target_audience ?? null,
                     }}
                     packs={packs}
-                    existingPackIds={surveys.map(s => s.pack_id)}
+                    existingPackIds={surveys.map(s => s.pack_id).filter((id): id is string => id !== null)}
                   />
                 </div>
               )}
