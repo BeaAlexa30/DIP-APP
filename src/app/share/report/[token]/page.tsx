@@ -6,7 +6,6 @@ import CategoryChart from '@/components/dashboard/AnalyticsCategoryVisualizer'
 import IndexScoreCard from '@/components/dashboard/MetricsOverviewCard'
 import IssueRankingTable from '@/components/dashboard/PriorityIssuesDisplay'
 import ReportExportButton from '@/components/reports/ReportDownloadController'
-import AIInsightsPanel from '@/components/dashboard/AIInsightsPanel'
 
 type ScoreResultWithCategory = Database['public']['Tables']['score_results']['Row'] & {
   framework_categories: { name: string } | null
@@ -97,7 +96,7 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with branding */}
-      <div className="bg-gradient-to-r from-gray-900 to-blue-900 text-white px-4 sm:px-8 py-4 sm:py-6 border-b-4 border-blue-500">
+      <div className="bg-gradient-to-r from-gray-900 to-blue-900 text-white px-8 py-6 border-b-4 border-blue-500">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <div className="bg-blue-500 rounded-full w-12 h-12 flex items-center justify-center">
@@ -108,7 +107,7 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
               <p className="text-blue-200 text-sm">Shareable Report View</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center justify-between">
             <div>
               <p className="text-lg font-semibold">{project.client_name}</p>
               <p className="text-xs text-blue-200 mt-1">
@@ -123,17 +122,16 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
               scoring={scoring}
               aiInsightSummary={(aiInsights as any)?.summary_text ?? undefined}
               aiThemes={Array.isArray((aiInsights as any)?.themes_json) ? (aiInsights as any).themes_json as string[] : undefined}
-              fullAnalysis={((aiInsights as any)?.model_metadata as any)?.fullAnalysis ?? undefined}
             />
           </div>
         </div>
       </div>
 
       {/* Report Content */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
+      <div className="max-w-6xl mx-auto px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           {/* Executive Health Score */}
-          <div className={`lg:col-span-1 rounded-2xl border p-5 sm:p-8 ${
+          <div className={`lg:col-span-1 rounded-2xl border p-8 ${
             scoring.healthScore >= 75 ? 'bg-green-50 border-green-200' :
             scoring.healthScore >= 50 ? 'bg-yellow-50 border-yellow-200' :
             'bg-red-50 border-red-200'
@@ -191,30 +189,33 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
           />
         </div>
 
-        {/* AI Insights — 5-Dimensional Analysis */}
-        {(aiInsights as any)?.summary_text ? (() => {
-          const meta = (aiInsights as any).model_metadata as any
-          const full = meta?.fullAnalysis
-          const isFallback = meta?.isFallback === true || meta?.model === 'deterministic-fallback'
-          const tabs = [
-            { key: 'descriptive',  label: 'What happened?',     icon: '📊' },
-            { key: 'diagnostic',   label: 'Why?',               icon: '🔍' },
-            { key: 'predictive',   label: 'What might happen?', icon: '🔮' },
-            { key: 'prescriptive', label: 'What to do?',        icon: '🎯' },
-            { key: 'kpi',          label: 'KPI View',            icon: '📈' },
-          ]
-          return (
-            <div className="mb-6">
-              <AIInsightsPanel
-                aiInsights={aiInsights as any}
-                full={full}
-                isFallback={isFallback}
-                tabs={tabs}
-                scoreRunId={scoring.scoreRunId}
-              />
+        {/* AI Insights */}
+        {(aiInsights as any)?.summary_text && (
+          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-8 mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-2xl">✨</span>
+              <h2 className="text-base font-semibold text-purple-900">AI-Generated Insights</h2>
+              <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">Non-Scoring</span>
             </div>
-          )
-        })() : null}
+            <p className="text-xs text-purple-400 italic mb-5">AI-generated content for reference only. Does not affect scoring.</p>
+            <p className="text-sm text-purple-900 leading-8 tracking-wide break-words">
+              {(aiInsights as any).summary_text}
+            </p>
+            {Array.isArray((aiInsights as any).themes_json) && ((aiInsights as any).themes_json as string[]).length > 0 && (
+              <div className="mt-6 pt-5 border-t border-purple-200">
+                <p className="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-3">Key Themes</p>
+                <ul className="space-y-2.5">
+                  {((aiInsights as any).themes_json as string[]).map((theme, i) => (
+                    <li key={i} className="text-sm text-purple-800 flex items-start gap-2.5 leading-6">
+                      <span className="text-purple-400 mt-1 shrink-0">●</span>
+                      <span>{theme}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-gray-200 text-center">

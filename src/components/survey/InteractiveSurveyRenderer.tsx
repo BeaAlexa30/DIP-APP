@@ -405,6 +405,39 @@ export default function SurveyFlow({
                 </div>
               )}
 
+              {/* Embedded Link - Imported External Survey */}
+              {current.type === 'embedded_link' && (() => {
+                const embedUrl = (current as any).embed_url as string
+                const isOpened = answers[current.id] === 'opened'
+                return (
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-500">
+                      This survey is hosted on an external platform. Click the button below to open it in a new tab.
+                    </p>
+                    <a
+                      href={embedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => handleAnswer(current.id, 'opened')}
+                      className="flex items-center justify-center gap-2 w-full px-5 py-3 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      Open External Survey
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                    {isOpened && (
+                      <p className="text-xs text-green-600 text-center">
+                        Survey opened — come back here and click Submit when done.
+                      </p>
+                    )}
+                    {embedUrl && (
+                      <p className="text-xs text-gray-400 break-all text-center">{embedUrl}</p>
+                    )}
+                  </div>
+                )
+              })()}
+
               {error && (
                 <p className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl">
                   {error}

@@ -102,9 +102,8 @@ export default function AddOrGenerateSurveyDialog({
 
   // — Generate state —
   const [genStep, setGenStep]           = useState<GenerateStep>('form')
-  const [projectOverview, setProjectOverview] = useState('')
-  const [targetRespondents, setTargetRespondents] = useState('')
-  const [surveyBenefit, setSurveyBenefit]   = useState('')
+  const [surveyDescription, setSurveyDescription] = useState('')
+  const [showTips, setShowTips]         = useState(false)
   const [genResult, setGenResult]       = useState<GenerateResult | null>(null)
   const [genError, setGenError]         = useState<string | null>(null)
   const [copied, setCopied]             = useState(false)
@@ -225,10 +224,7 @@ export default function AddOrGenerateSurveyDialog({
   }
 
   // ── Generate new AI survey ────────────────────────────────────────────────────
-  const isGenFormValid =
-    projectOverview.trim().length > 10 &&
-    targetRespondents.trim().length > 5 &&
-    surveyBenefit.trim().length > 5
+  const isGenFormValid = surveyDescription.trim().length > 20
 
   async function handleGenerate() {
     if (!isGenFormValid) return
@@ -240,9 +236,7 @@ export default function AddOrGenerateSurveyDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId,
-          projectOverview: projectOverview.trim(),
-          targetRespondents: targetRespondents.trim(),
-          surveyBenefit: surveyBenefit.trim(),
+          surveyDescription: surveyDescription.trim(),
         }),
       })
       const json = await res.json()
@@ -413,6 +407,8 @@ export default function AddOrGenerateSurveyDialog({
     setTab('recommend')
     setAddError(null)
     setGenStep('form')
+    setSurveyDescription('')
+    setShowTips(false)
     setGenResult(null)
     setGenError(null)
     setCopied(false)
@@ -653,67 +649,65 @@ export default function AddOrGenerateSurveyDialog({
                 <>
                   {(genStep === 'form' || genStep === 'generating') && (
                     <>
-                      <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 text-sm text-violet-800">
-                        <p className="font-medium mb-1">How it works</p>
-                        <p className="text-xs text-violet-600 leading-relaxed">
-                          Describe your project below. Groq will design a complete survey with
-                          categories, questions and answer options — automatically published with
-                          a public shareable link.
+                      {/* Tips panel */}
+                      <div className="border border-amber-200 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowTips(v => !v)}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 text-sm font-medium text-amber-800 hover:bg-amber-100 transition-colors"
+                        >
+                          <span className="flex items-center gap-2">💡 Prompting Tips for Better Surveys</span>
+                          <span className="text-amber-600 text-xs">{showTips ? '▲ Hide' : '▼ Show'}</span>
+                        </button>
+                        {showTips && (
+                          <div className="px-4 py-4 bg-white text-xs text-gray-600 space-y-3 border-t border-amber-100">
+                            <div>
+                              <p className="font-semibold text-gray-800 mb-0.5">1. Persona</p>
+                              <p>Tell the AI who it is — e.g. <em>"Act as a Senior UX Researcher"</em> or <em>"Market Analyst"</em>.</p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-800 mb-0.5">2. Length / Completion Time</p>
+                              <p>Specify how long the survey should take — e.g. <em>"3 minutes max"</em> or a target number of questions.</p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-800 mb-0.5">3. Question Types</p>
+                              <p>Define the mix — e.g. <em>"70% Likert scale, 20% Multiple choice, 10% Open-ended"</em>.</p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-800 mb-0.5">4. Tone / Style</p>
+                              <p>Specify if you want formal, conversational, or friendly phrasing.</p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-800 mb-0.5">5. Constraints</p>
+                              <p>Mention what to avoid — e.g. <em>"Avoid leading questions,"</em> <em>"No jargon,"</em> or <em>"Don't ask for PII/personal data"</em>.</p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-800 mb-0.5">6. Logical Flow</p>
+                              <p>Specify skip logic if needed — e.g. <em>"If they answer No to Q2, skip to Q5"</em>.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Single description input */}
+                      <div>
+                        <label htmlFor="survey-description" className="block text-sm font-semibold text-gray-800 mb-1.5">
+                          Survey Description <span className="text-red-400">*</span>
+                        </label>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Describe your project, target respondents, purpose, preferred question types, tone, and any special instructions — all in one place.
                         </p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="project-overview" className="block text-sm font-semibold text-gray-800 mb-1.5">
-                          Project Overview <span className="text-red-400">*</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mb-2">Describe what the project is about, its goals, and context.</p>
                         <textarea
-                          id="project-overview"
-                          name="projectOverview"
-                          rows={4}
-                          value={projectOverview}
-                          onChange={e => setProjectOverview(e.target.value)}
+                          id="survey-description"
+                          name="surveyDescription"
+                          rows={8}
+                          value={surveyDescription}
+                          onChange={e => setSurveyDescription(e.target.value)}
                           disabled={genStep === 'generating'}
-                          placeholder="e.g. We are launching a new mobile banking app targeting young adults in Southeast Asia…"
+                          placeholder={`e.g. Act as a Senior UX Researcher. Create a 3-minute customer satisfaction survey for a mobile banking app targeting adults aged 18–35 in Southeast Asia. Use 60% Likert scale and 40% multiple choice questions. Keep the tone friendly and conversational. Avoid jargon and don't ask for personal data. Goal: understand pain points with existing banking apps.`}
                           className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none disabled:bg-gray-50 disabled:text-gray-400"
                         />
-                        <p className="text-xs text-gray-400 mt-1 text-right">{projectOverview.length} chars</p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="target-respondents" className="block text-sm font-semibold text-gray-800 mb-1.5">
-                          Target Respondents <span className="text-red-400">*</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mb-2">Who will answer this survey?</p>
-                        <textarea
-                          id="target-respondents"
-                          name="targetRespondents"
-                          rows={3}
-                          value={targetRespondents}
-                          onChange={e => setTargetRespondents(e.target.value)}
-                          disabled={genStep === 'generating'}
-                          placeholder="e.g. Adults aged 18-35, tech-savvy smartphone users…"
-                          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none disabled:bg-gray-50 disabled:text-gray-400"
-                        />
-                        <p className="text-xs text-gray-400 mt-1 text-right">{targetRespondents.length} chars</p>
-                      </div>
-
-                      <div>
-                        <label htmlFor="survey-benefit" className="block text-sm font-semibold text-gray-800 mb-1.5">
-                          Benefit / Purpose of the Survey <span className="text-red-400">*</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mb-2">What will we learn from this survey?</p>
-                        <textarea
-                          id="survey-benefit"
-                          name="surveyBenefit"
-                          rows={3}
-                          value={surveyBenefit}
-                          onChange={e => setSurveyBenefit(e.target.value)}
-                          disabled={genStep === 'generating'}
-                          placeholder="e.g. Understand user pain points with existing banking apps…"
-                          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none disabled:bg-gray-50 disabled:text-gray-400"
-                        />
-                        <p className="text-xs text-gray-400 mt-1 text-right">{surveyBenefit.length} chars</p>
+                        <p className="text-xs text-gray-400 mt-1 text-right">{surveyDescription.length} chars</p>
                       </div>
 
                       <div className="flex gap-3 pt-2">

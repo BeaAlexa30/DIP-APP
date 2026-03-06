@@ -85,9 +85,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               </Link>
             )}
             <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${project.status === 'active' ? 'bg-green-100 text-green-700' :
-                project.status === 'completed' ? 'bg-[#009E9B]/10 text-[#007A78]' :
                   project.status === 'archived' ? 'bg-gray-200 text-gray-600' :
-                    'bg-yellow-100 text-yellow-700'
+                    'bg-green-100 text-green-700'
               }`}>
               {project.status}
             </span>
@@ -185,9 +184,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 projectArchived={project.status === 'archived'}
               />
 
-              {/* Add / Generate AI Survey — admin only, hidden when project is archived */}
+              {/* Add / Generate / Import Survey — admin only, hidden when project is archived */}
               {isAdmin && project.status !== 'archived' && (
-                <div className="mt-4">
+                <div className="mt-4 flex flex-col gap-2">
                   <AddOrGenerateSurveyDialog
                     projectId={project.id}
                     projectName={project.client_name}
@@ -217,19 +216,21 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 </div>
 
                 {isAdmin && (
-                  <AddOrGenerateSurveyDialog
-                    projectId={project.id}
-                    projectName={project.client_name}
-                    projectContext={{
-                      industry: project.industry ?? null,
-                      goal: project.goal ?? null,
-                      stage: project.stage ?? null,
-                      channels: project.channels ?? null,
-                      target_audience: project.target_audience ?? null,
-                    }}
-                    packs={packs}
-                    existingPackIds={[]}
-                  />
+                  <div className="flex flex-col gap-2">
+                    <AddOrGenerateSurveyDialog
+                      projectId={project.id}
+                      projectName={project.client_name}
+                      projectContext={{
+                        industry: project.industry ?? null,
+                        goal: project.goal ?? null,
+                        stage: project.stage ?? null,
+                        channels: project.channels ?? null,
+                        target_audience: project.target_audience ?? null,
+                      }}
+                      packs={packs}
+                      existingPackIds={[]}
+                    />
+                  </div>
                 )}
               </div>
             ) : (

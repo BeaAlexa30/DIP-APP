@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
 import SurveyStatusControl from './SurveyStateManager'
 import ScoreRunTrigger from './ScoringEngineController'
+import EditCustomSurveyDialog from './EditCustomSurveyDialog'
 
 interface SurveyToken {
   id: string
@@ -60,6 +61,17 @@ export default function SurveyCard({
 
   const frameworkName = survey.pack_version_snapshot?.packName ?? 'Unknown Framework'
   const frameworkVersion = survey.pack_version_snapshot?.version ?? '1.0'
+  const responseUrl: string | null = survey.pack_version_snapshot?.response_url ?? null
+
+  const [responseLinkCopied, setResponseLinkCopied] = useState(false)
+
+  const copyResponseLink = () => {
+    if (responseUrl) {
+      navigator.clipboard.writeText(responseUrl)
+      setResponseLinkCopied(true)
+      setTimeout(() => setResponseLinkCopied(false), 2000)
+    }
+  }
 
   const copyLink = () => {
     if (surveyUrl) {
@@ -151,6 +163,33 @@ export default function SurveyCard({
           </button>
         )}
 
+        {/* Response / Results link (imported surveys only) */}
+        {responseUrl && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Response / Results Link</label>
+            <div className="flex gap-2">
+              <a
+                href={responseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-blue-600 font-mono hover:underline truncate"
+              >
+                {responseUrl}
+              </a>
+              <button
+                onClick={copyResponseLink}
+                className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                  responseLinkCopied
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {responseLinkCopied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Latest Score Run */}
         {latestScoreRun && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -176,6 +215,14 @@ export default function SurveyCard({
 
         {/* Actions */}
         <div className="pt-2 space-y-2">
+          {/* Edit Questions — custom & AI-generated surveys (not imported external links) */}
+          {(survey.pack_version_snapshot?.custom_survey === true || survey.pack_version_snapshot?.ai_generated === true) && survey.pack_version_snapshot?.imported_survey !== true && !projectArchived && (
+            <EditCustomSurveyDialog
+              surveyId={survey.id}
+              snapshot={survey.pack_version_snapshot}
+            />
+          )}
+
           {/* Scoring Engine Trigger */}
           {responseCount > 0 && (
             <ScoreRunTrigger

@@ -54,6 +54,7 @@ export default async function FrameworksPage() {
       active: true,
       created_at: survey.created_at,
       projects: projectInfo ? [projectInfo] : [],
+      isCustomSurvey: true,
     }
   })
 

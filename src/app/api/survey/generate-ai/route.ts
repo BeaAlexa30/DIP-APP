@@ -16,24 +16,28 @@ import { logActivity, getUserInfo } from '@/lib/activity/ActivityLogger'
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! })
 
 /* ── Groq prompt ─────────────────────────────────────────── */
-function buildPrompt(
-  projectOverview: string,
-  targetRespondents: string,
-  surveyBenefit: string,
-): string {
-  return `You are an expert survey designer. Create a comprehensive survey based on the following information.
+function buildPrompt(surveyDescription: string): string {
+  return `You are an expert survey designer. Create a comprehensive, well-structured survey based on the following description.
 
-PROJECT OVERVIEW:
-${projectOverview}
+SURVEY DESCRIPTION:
+${surveyDescription}
 
-TARGET RESPONDENTS:
-${targetRespondents}
+Design a survey with 2-5 thematic categories, each containing 3-6 questions.
+Choose question types that best fit the content and any preferences stated in the description.
 
-SURVEY BENEFIT / PURPOSE:
-${surveyBenefit}
-
-Design a survey with 3-5 thematic categories, each containing 3-6 questions.
-Use ONLY these two question types: single_select and scale.
+AVAILABLE QUESTION TYPES:
+- short_text: Free-text single-line answer
+- long_text: Free-text multi-line answer
+- multiple_choice: Pick exactly one option from a list
+- checkboxes: Pick one or more options from a list
+- dropdown: Pick one option from a dropdown
+- linear_scale: Rate on a numeric scale
+- yes_no: Simple Yes or No
+- email: Email address input
+- url: Website URL input
+- date: Date input
+- time: Time input
+- number: Numeric input
 
 IMPORTANT — respond ONLY with valid JSON in exactly this structure (no markdown fences, no extra text):
 {
@@ -43,21 +47,31 @@ IMPORTANT — respond ONLY with valid JSON in exactly this structure (no markdow
       "name": "string",
       "questions": [
         {
-          "type": "single_select",
+          "type": "short_text",
+          "prompt": "string",
+          "required": true
+        },
+        {
+          "type": "multiple_choice",
           "prompt": "string",
           "required": true,
           "options": [
-            { "label": "string", "value_key": "string" }
+            { "label": "string", "value_key": "snake_case_string" }
           ]
         },
         {
-          "type": "scale",
+          "type": "linear_scale",
           "prompt": "string",
           "required": true,
           "scaleMin": 1,
           "scaleMax": 5,
           "minLabel": "string",
           "maxLabel": "string"
+        },
+        {
+          "type": "yes_no",
+          "prompt": "string",
+          "required": true
         }
       ]
     }
@@ -65,14 +79,12 @@ IMPORTANT — respond ONLY with valid JSON in exactly this structure (no markdow
 }
 
 Strict rules — violating any rule will break the survey:
-- ONLY use "single_select" or "scale" types. NEVER use "text" or any other type.
-- scale questions: scaleMin MUST be 1, scaleMax MUST be 5. Always 1-5. Never 1-10, never any percentage.
-- scale minLabel and maxLabel must describe the endpoints (e.g. "Very Dissatisfied" / "Very Satisfied").
-- scale questions must NOT include an options array.
-- single_select questions: options array required with 3-5 choices. value_key must be snake_case and unique within the question.
-- Do NOT ask any question involving percentages, numerical estimates, or open-ended text input.
-- Keep question prompts concise, clear, and directly relevant to the project.
-- Category names should be thematic and professional.`
+- For multiple_choice, checkboxes, dropdown: include an options array with 2-5 items. value_key must be snake_case and unique within the question.
+- For linear_scale: scaleMin must be 1, scaleMax between 3 and 10. Always include minLabel and maxLabel describing the endpoints. Do NOT include an options array.
+- For short_text, long_text, email, url, date, time, number, yes_no: do NOT include an options array.
+- Keep question prompts concise, clear, and directly relevant.
+- Category names should be thematic and professional.
+- Honor any persona, length, tone, question-type mix, or constraints mentioned in the description.`
 }
 
 /* ── Snapshot builder ──────────────────────────────────────── */
@@ -132,9 +144,7 @@ function buildSnapshot(
     ai_generated: true,
     packName: parsed.surveyTitle ?? 'AI-Generated Survey',
     version: 'ai-1.0',
-    projectOverview,
-    targetRespondents,
-    surveyBenefit,
+    surveyDescription,
     categories,
   }
 }
@@ -146,11 +156,11 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response
 
   try {
-    const { projectId, projectOverview, targetRespondents, surveyBenefit } = await req.json()
+    const { projectId, surveyDescription } = await req.json()
 
-    if (!projectId || !projectOverview || !targetRespondents || !surveyBenefit) {
+    if (!projectId || !surveyDescription) {
       return NextResponse.json(
-        { error: 'projectId, projectOverview, targetRespondents, and surveyBenefit are required' },
+        { error: 'projectId and surveyDescription are required' },
         { status: 400 },
       )
     }
@@ -161,7 +171,7 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: 'user',
-          content: buildPrompt(projectOverview, targetRespondents, surveyBenefit),
+          content: buildPrompt(surveyDescription),
         },
       ],
       temperature: 0.7,
@@ -183,12 +193,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'AI response missing categories.' }, { status: 500 })
     }
 
-    const snapshot = buildSnapshot(parsed, projectOverview, targetRespondents, surveyBenefit)
+    const snapshot = buildSnapshot(parsed, surveyDescription)
 
     // ── 2. Create a unique framework pack row for this survey ─
     const supabase = await createServiceClient()
 
-    const packDescription = `${surveyBenefit.trim()} [AI Generated]`
+    const packDescription = `${surveyDescription.trim().slice(0, 200)} [AI Generated]`
 
     // Each AI survey gets its own pack row so the Framework Packs table
     // shows a meaningful, per-survey description.

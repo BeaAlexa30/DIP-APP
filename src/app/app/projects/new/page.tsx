@@ -1,14 +1,13 @@
 'use client'
 
-import { useCan } from '@/components/app/UserProfileProvider'
-import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { useCan } from '@/components/app/UserProfileProvider'
 
 const STAGE_OPTIONS = ['Discovery', 'Growth', 'Optimization', 'Retention', 'Turnaround']
-const CHANNEL_OPTIONS = ['Web', 'Mobile App', 'In-store', 'Phone/Call Center', 'Email', 'Social Media', 'Marketplace']
+const CHANNEL_OPTIONS = ['Web', 'Mobile App', 'In-store', 'Phone/Call Center', 'Email', 'Social Media', 'Marketplace', 'Other']
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -41,6 +40,9 @@ export default function NewProjectPage() {
     target_audience: '',
   })
 
+  const [otherStageText, setOtherStageText] = useState('')
+  const [otherChannels, setOtherChannels] = useState<string[]>([''])
+
   const toggleChannel = (ch: string) =>
     setForm(f => ({
       ...f,
@@ -62,7 +64,7 @@ export default function NewProjectPage() {
       .insert({
         ...form,
         created_by: user.id,
-        status: 'draft',
+        status: 'active',
       })
       .select()
       .single()
@@ -129,7 +131,17 @@ export default function NewProjectPage() {
           >
             <option value="">Select stage…</option>
             {STAGE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            <option value="Other">Other</option>
           </select>
+          {form.stage === 'Other' && (
+            <input
+              type="text"
+              value={otherStageText}
+              onChange={e => setOtherStageText(e.target.value)}
+              placeholder="Specify business stage…"
+              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
         </div>
 
         {/* Channels */}
@@ -150,6 +162,41 @@ export default function NewProjectPage() {
               </button>
             ))}
           </div>
+          {form.channels.includes('Other') && (
+            <div className="mt-2 space-y-2">
+              {otherChannels.map((ch, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={ch}
+                    onChange={e => {
+                      const updated = [...otherChannels]
+                      updated[i] = e.target.value
+                      setOtherChannels(updated)
+                    }}
+                    placeholder="Specify other channel…"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {otherChannels.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setOtherChannels(otherChannels.filter((_, idx) => idx !== i))}
+                      className="px-2 py-1 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setOtherChannels([...otherChannels, ''])}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+              >
+                + Add another
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Target Audience */}
@@ -178,12 +225,13 @@ export default function NewProjectPage() {
           >
             Cancel
           </button>
-          <Button
-            type="submit"
-            disabled={loading}
-            className="bg-[#00B3B0] hover:bg-[#009E9B] text-white rounded-lg"
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-500 transition-colors"
           >
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {loading ? (
                 <motion.span
                   key="loading"
@@ -213,7 +261,7 @@ export default function NewProjectPage() {
                 </motion.span>
               )}
             </AnimatePresence>
-          </Button>
+          </motion.button>
         </div>
       </form>
     </div>

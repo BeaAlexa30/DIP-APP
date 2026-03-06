@@ -1,17 +1,11 @@
 'use client'
 
-import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
 
 type SortKey = 'name' | 'version' | 'status' | 'created_at'
 type SortDir = 'asc' | 'desc'
-
-interface PackProject {
-  id: string
-  name: string
-}
 
 interface Pack {
   id: string
@@ -20,7 +14,7 @@ interface Pack {
   description: string | null
   active: boolean
   created_at: string
-  projects?: PackProject[]
+  isCustomSurvey?: boolean
 }
 
 interface Column {
@@ -29,12 +23,11 @@ interface Column {
 }
 
 const ALL_COLUMNS: Column[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'version', label: 'Version' },
+  { key: 'name',        label: 'Name' },
+  { key: 'version',     label: 'Version' },
   { key: 'description', label: 'Description' },
-  { key: 'status', label: 'Status' },
-  { key: 'projects', label: 'Projects' },
-  { key: 'created_at', label: 'Created' },
+  { key: 'status',      label: 'Status' },
+  { key: 'created_at',  label: 'Created' },
 ]
 
 interface Props {
@@ -43,7 +36,23 @@ interface Props {
 }
 
 function ExpandableDescription({ text }: { text: string }) {
-  return <span className="whitespace-pre-wrap break-words">{text}</span>
+  const [expanded, setExpanded] = useState(false)
+  const LIMIT = 80
+  const isLong = text.length > LIMIT
+
+  if (!isLong) return <span>{text}</span>
+
+  return (
+    <span>
+      {expanded ? text : text.slice(0, LIMIT) + '…'}
+      <button
+        onClick={(e) => { e.stopPropagation(); setExpanded(v => !v) }}
+        className="ml-1 text-purple-500 hover:text-purple-700 text-xs underline whitespace-nowrap no-print"
+      >
+        {expanded ? 'Show less' : 'Show more'}
+      </button>
+    </span>
+  )
 }
 
 export default function FrameworkPacksTable({ packs, canManage = false }: Props) {
@@ -56,14 +65,35 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
   const [toggleError, setToggleError] = useState<string | null>(null)
 
   // Delete state
+  const [rows, setRows] = useState<Pack[]>(packs)
   const [deleteTarget, setDeleteTarget] = useState<Pack | null>(null)
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('')
-  const [deleting, setDeleting] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [sortKey, setSortKey] = useState<SortKey>('created_at')
-  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`/api/survey/${deleteTarget.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error ?? 'Failed to delete')
+      }
+      setRows(prev => prev.filter(p => p.id !== deleteTarget.id))
+      setDeleteTarget(null)
+      setDeleteConfirmInput('')
+    } catch (e: any) {
+      setDeleteError(e.message)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+  const [search, setSearch]               = useState('')
+  const [filterStatus, setFilterStatus]   = useState('')
+  const [sortKey, setSortKey]             = useState<SortKey>('created_at')
+  const [sortDir, setSortDir]             = useState<SortDir>('desc')
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
     new Set(ALL_COLUMNS.map((c) => c.key))
   )
@@ -96,31 +126,9 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
     }
   }
 
-  async function handleDelete() {
-    if (!deleteTarget) return
-    setDeleting(true)
-    setDeleteError(null)
-    try {
-      const res = await fetch(`/api/framework/${deleteTarget.id}`, { method: 'DELETE' })
-      const json = await res.json()
-      if (!res.ok) {
-        setDeleteError(json.error ?? 'Failed to delete framework pack')
-        setDeleting(false)
-        return
-      }
-      setDeleteTarget(null)
-      setDeleteConfirmInput('')
-      setDeleting(false)
-      router.refresh()
-    } catch (e: any) {
-      setDeleteError(e.message)
-      setDeleting(false)
-    }
-  }
-
-  // ── Processed data ────────────────────────────────────────
+  // Use local rows so deletions reflect immediately
   const processed = useMemo(() => {
-    let result = [...packs]
+    let result = [...rows]
 
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -132,7 +140,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
       )
     }
 
-    if (filterStatus === 'active') result = result.filter((p) => activeMap[p.id] ?? p.active)
+    if (filterStatus === 'active')   result = result.filter((p) => activeMap[p.id] ?? p.active)
     if (filterStatus === 'inactive') result = result.filter((p) => !(activeMap[p.id] ?? p.active))
 
     result.sort((a, b) => {
@@ -154,7 +162,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
     })
 
     return result
-  }, [packs, search, filterStatus, sortKey, sortDir, activeMap])
+  }, [rows, search, filterStatus, sortKey, sortDir, activeMap])
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -176,7 +184,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
   }
 
   const shownColumns = ALL_COLUMNS.filter((c) => visibleColumns.has(c.key))
-  const hasFilters = search || filterStatus
+  const hasFilters   = search || filterStatus
 
   return (
     <>
@@ -184,64 +192,43 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-            {/* Header */}
             <div className="bg-red-50 border-b border-red-200 px-6 py-4 flex items-start gap-3">
               <span className="text-2xl mt-0.5">⚠️</span>
               <div>
-                <h2 className="text-base font-bold text-red-700">Delete Framework Pack</h2>
+                <h2 className="text-base font-bold text-red-700">Delete Custom Survey</h2>
                 <p className="text-xs text-red-500 mt-0.5">This action is permanent and cannot be undone.</p>
               </div>
             </div>
-
-            {/* Body */}
             <div className="px-6 py-5 space-y-4">
               <p className="text-sm text-gray-700">
-                You are about to delete <span className="font-semibold text-gray-900">{deleteTarget.name}</span>{' '}
-                <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">v{deleteTarget.version}</span>.
+                You are about to permanently delete{' '}
+                <span className="font-semibold text-gray-900">{deleteTarget.name}</span>.
+                All responses collected for this survey will also be deleted.
               </p>
-
-              {(deleteTarget.projects ?? []).length > 0 ? (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-800">
-                  <p className="font-semibold mb-1">⚠ This pack is used by {deleteTarget.projects!.length} project{deleteTarget.projects!.length > 1 ? 's' : ''}:</p>
-                  <ul className="list-disc list-inside space-y-0.5">
-                    {deleteTarget.projects!.map((p) => (
-                      <li key={p.id}>{p.name}</li>
-                    ))}
-                  </ul>
-                  <p className="mt-2">All linked surveys, responses, and score runs will be <strong>permanently deleted</strong>.</p>
-                </div>
-              ) : (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-xs text-gray-600">
-                  This pack is not used by any projects yet.
-                </div>
-              )}
-
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                  Type the pack name <span className="font-semibold text-gray-900">{deleteTarget.name}</span> to confirm:
+                  Type the survey name{' '}
+                  <span className="font-semibold text-gray-900">{deleteTarget.name}</span>{' '}to confirm:
                 </label>
                 <input
                   type="text"
                   value={deleteConfirmInput}
-                  onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                  onChange={e => setDeleteConfirmInput(e.target.value)}
                   placeholder={deleteTarget.name}
                   className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-400"
                   autoFocus
                 />
               </div>
-
               {deleteError && (
                 <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                   {deleteError}
                 </div>
               )}
             </div>
-
-            {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
               <Button
                 onClick={() => { setDeleteTarget(null); setDeleteConfirmInput(''); setDeleteError(null) }}
-                disabled={deleting}
+                disabled={deleteLoading}
                 variant="outline"
                 className="rounded-lg"
               >
@@ -249,11 +236,11 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
               </Button>
               <Button
                 onClick={handleDelete}
-                disabled={deleting || deleteConfirmInput !== deleteTarget.name}
+                disabled={deleteLoading || deleteConfirmInput !== deleteTarget.name}
                 variant="destructive"
                 className="rounded-lg"
               >
-                {deleting ? 'Deleting…' : 'Delete Permanently'}
+                {deleteLoading ? 'Deleting…' : 'Delete Permanently'}
               </Button>
             </div>
           </div>
@@ -342,23 +329,21 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
               className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
             />
             {search && (
-              <Button onClick={() => setSearch('')} variant="ghost" size="icon-sm" className="absolute inset-y-0 right-3">✕</Button>
+              <button onClick={() => setSearch('')} className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600">✕</button>
             )}
           </div>
 
           {/* Column picker */}
           <div className="relative">
-            <Button
+            <button
               onClick={() => setShowColumnPicker((v) => !v)}
-              variant="outline"
-              size="sm"
-              className="gap-1.5 rounded-lg"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
             >
               <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
               </svg>
               Columns
-            </Button>
+            </button>
             {showColumnPicker && (
               <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-44">
                 <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Visible Columns</p>
@@ -378,17 +363,15 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
           </div>
 
           {/* Print */}
-          <Button
+          <button
             onClick={() => window.print()}
-            variant="outline"
-            size="sm"
-            className="gap-1.5 rounded-lg"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
           >
             <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
             </svg>
             Print Report
-          </Button>
+          </button>
         </div>
 
         {/* Row 2: filters */}
@@ -404,18 +387,16 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
           </select>
 
           {hasFilters && (
-            <Button
+            <button
               onClick={() => { setSearch(''); setFilterStatus('') }}
-              variant="ghost"
-              size="sm"
-              className="text-red-500 hover:text-red-700"
+              className="text-sm text-red-500 hover:text-red-700 px-2 py-1 rounded transition-colors"
             >
               Clear filters
-            </Button>
+            </button>
           )}
 
           <span className="ml-auto text-xs text-gray-400">
-            {processed.length} of {packs.length} pack{packs.length !== 1 ? 's' : ''}
+            {processed.length} of {rows.length} pack{rows.length !== 1 ? 's' : ''}
           </span>
         </div>
       </div>
@@ -424,12 +405,12 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
       {toggleError && (
         <div className="no-print flex items-center gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
           <span>⚠</span><span>{toggleError}</span>
-          <Button onClick={() => setToggleError(null)} variant="ghost" size="icon-xs" className="ml-auto text-red-400 hover:text-red-600">✕</Button>
+          <button onClick={() => setToggleError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
         </div>
       )}
 
       {/* Table */}
-      <div id="fw-print-area" className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      <div id="fw-print-area" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {/* Print header */}
         <div className="print-header" style={{ display: 'none' }}>
           <div className="print-header-left">
@@ -462,9 +443,6 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                     </th>
                   )
                 })}
-                {canManage && (
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider no-print">Actions</th>
-                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -479,7 +457,7 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                     </td>
                   )}
                   {visibleColumns.has('description') && (
-                    <td className="px-6 py-4 text-gray-500 max-w-md text-sm leading-relaxed">
+                    <td className="px-6 py-4 text-gray-500 max-w-sm">
                       {pack.description ? (
                         <ExpandableDescription text={pack.description} />
                       ) : '—'}
@@ -488,34 +466,24 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                   {visibleColumns.has('status') && (
                     <td className="px-6 py-4">
                       {canManage ? (
-                        <Switch
-                          checked={activeMap[pack.id] ?? pack.active}
-                          onCheckedChange={() => handleToggle(pack.id)}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleToggle(pack.id) }}
                           disabled={toggling[pack.id]}
-                          className="no-print data-[state=checked]:bg-green-500"
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none no-print ${
+                            (activeMap[pack.id] ?? pack.active) ? 'bg-green-500' : 'bg-gray-300'
+                          } disabled:opacity-50 cursor-pointer`}
                           title={(activeMap[pack.id] ?? pack.active) ? 'Click to deactivate' : 'Click to activate'}
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                        >
+                          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                            (activeMap[pack.id] ?? pack.active) ? 'translate-x-6' : 'translate-x-1'
+                          }`} />
+                        </button>
                       ) : (
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${(activeMap[pack.id] ?? pack.active) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                          }`}>
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                          (activeMap[pack.id] ?? pack.active) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                        }`}>
                           {(activeMap[pack.id] ?? pack.active) ? 'Active' : 'Inactive'}
                         </span>
-                      )}
-                    </td>
-                  )}
-                  {visibleColumns.has('projects') && (
-                    <td className="px-6 py-4">
-                      {(pack.projects ?? []).length === 0 ? (
-                        <span className="text-xs text-gray-400 italic">None</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {(pack.projects ?? []).map((p) => (
-                            <span key={p.id} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full whitespace-nowrap">
-                              {p.name}
-                            </span>
-                          ))}
-                        </div>
                       )}
                     </td>
                   )}
@@ -524,10 +492,10 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                       {new Date(pack.created_at).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })}
                     </td>
                   )}
-                  {canManage && (
-                    <td className="px-6 py-4 no-print">
+                  {canManage && pack.isCustomSurvey && (
+                    <td className="px-6 py-4 no-print" onClick={e => e.stopPropagation()}>
                       <Button
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(pack); setDeleteConfirmInput(''); setDeleteError(null) }}
+                        onClick={() => { setDeleteTarget(pack); setDeleteConfirmInput(''); setDeleteError(null) }}
                         variant="outline"
                         size="sm"
                         className="text-red-600 hover:text-red-800 border-red-200 hover:border-red-400 hover:bg-red-50 rounded-lg"
@@ -536,6 +504,9 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
                       </Button>
                     </td>
                   )}
+                  {canManage && !pack.isCustomSurvey && (
+                    <td className="px-6 py-4 no-print" />
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -543,13 +514,12 @@ export default function FrameworkPacksTable({ packs, canManage = false }: Props)
         ) : (
           <div className="py-16 text-center text-gray-400">
             <p className="text-base mb-2">No framework packs match your filters</p>
-            <Button
+            <button
               onClick={() => { setSearch(''); setFilterStatus('') }}
-              variant="link"
-              className="text-purple-600"
+              className="text-sm text-purple-600 hover:underline"
             >
               Clear all filters
-            </Button>
+            </button>
           </div>
         )}
 

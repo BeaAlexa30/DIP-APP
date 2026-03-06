@@ -19,15 +19,23 @@ export default function EditProjectModal({ project, isOpen, onClose }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const PRESET_CHANNELS = ['Web', 'Mobile', 'Email', 'Social Media', 'In-App', 'SMS']
+  const PRESET_STAGES = ['Awareness', 'Consideration', 'Purchase', 'Retention', 'Advocacy']
+  const savedOtherChannels = (project.channels || []).filter(c => !PRESET_CHANNELS.includes(c) && c !== 'Other')
+  const savedStageIsOther = !!project.stage && !PRESET_STAGES.includes(project.stage)
   const [formData, setFormData] = useState({
     client_name: project.client_name,
     industry: project.industry || '',
     goal: project.goal || '',
-    stage: project.stage || '',
-    channels: project.channels || [],
+    stage: savedStageIsOther ? 'Other' : (project.stage || ''),
+    channels: savedOtherChannels.length > 0
+      ? [...(project.channels || []).filter(c => PRESET_CHANNELS.includes(c)), 'Other']
+      : (project.channels || []),
     target_audience: project.target_audience || '',
     status: project.status,
   })
+  const [otherStageText, setOtherStageText] = useState(savedStageIsOther ? (project.stage || '') : '')
+  const [otherChannels, setOtherChannels] = useState<string[]>(savedOtherChannels.length > 0 ? savedOtherChannels : [''])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -35,10 +43,14 @@ export default function EditProjectModal({ project, isOpen, onClose }: Props) {
     setError(null)
 
     try {
+      const finalStage = formData.stage === 'Other' ? (otherStageText.trim() || 'Other') : formData.stage
+      const finalChannels = formData.channels.includes('Other')
+        ? [...formData.channels.filter(c => c !== 'Other'), ...otherChannels.filter(c => c.trim())]
+        : formData.channels
       const res = await fetch(`/api/projects/${project.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, stage: finalStage, channels: finalChannels }),
       })
 
       if (!res.ok) {
@@ -142,7 +154,17 @@ export default function EditProjectModal({ project, isOpen, onClose }: Props) {
                     <option value="Purchase">Purchase</option>
                     <option value="Retention">Retention</option>
                     <option value="Advocacy">Advocacy</option>
+                    <option value="Other">Other</option>
                   </select>
+                  {formData.stage === 'Other' && (
+                    <input
+                      type="text"
+                      value={otherStageText}
+                      onChange={e => setOtherStageText(e.target.value)}
+                      placeholder="Specify business stage…"
+                      className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    />
+                  )}
                 </div>
 
                 {/* Channels */}
@@ -173,6 +195,41 @@ export default function EditProjectModal({ project, isOpen, onClose }: Props) {
                       </label>
                     ))}
                   </div>
+                  {formData.channels.includes('Other') && (
+                    <div className="mt-2 space-y-2">
+                      {otherChannels.map((ch, i) => (
+                        <div key={i} className="flex gap-2">
+                          <input
+                            type="text"
+                            value={ch}
+                            onChange={e => {
+                              const updated = [...otherChannels]
+                              updated[i] = e.target.value
+                              setOtherChannels(updated)
+                            }}
+                            placeholder="Specify other channel…"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                          />
+                          {otherChannels.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setOtherChannels(otherChannels.filter((_, idx) => idx !== i))}
+                              className="px-2 py-1 text-gray-400 hover:text-red-500 transition-colors text-sm"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setOtherChannels([...otherChannels, ''])}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        + Add another
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Target Audience */}
@@ -185,21 +242,6 @@ export default function EditProjectModal({ project, isOpen, onClose }: Props) {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="e.g., Millennials, B2B decision makers"
                   />
-                </div>
-
-                {/* Status */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as Project['status'] })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="active">Active</option>
-                    <option value="completed">Completed</option>
-                    <option value="archived">Archived</option>
-                  </select>
                 </div>
 
                 {/* Actions */}

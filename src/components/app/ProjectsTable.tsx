@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const statusColors: Record<string, string> = {
-  draft: 'bg-yellow-100 text-yellow-700',
   active: 'bg-green-100 text-green-700',
-  completed: 'bg-blue-100 text-blue-700',
   archived: 'bg-gray-100 text-gray-500',
 }
 

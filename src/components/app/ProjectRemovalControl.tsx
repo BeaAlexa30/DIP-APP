@@ -8,7 +8,7 @@ import { useState } from 'react'
 interface Props {
   projectId: string
   projectName: string
-  currentStatus: 'draft' | 'active' | 'completed' | 'archived'
+  currentStatus: string
   surveyCount?: number
 }
 
