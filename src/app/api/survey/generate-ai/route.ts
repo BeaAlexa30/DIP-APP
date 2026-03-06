@@ -90,9 +90,7 @@ Strict rules — violating any rule will break the survey:
 /* ── Snapshot builder ──────────────────────────────────────── */
 function buildSnapshot(
   parsed: any,
-  projectOverview: string,
-  targetRespondents: string,
-  surveyBenefit: string,
+  surveyDescription: string,
 ) {
   const categories = (parsed.categories as any[]).map((cat: any, catIdx: number) => ({
     id: crypto.randomUUID(),
