@@ -40,10 +40,23 @@ export default function SurveyFlow({
   const progress = ((currentIndex) / allQuestions.length) * 100
 
   const isAnswered = (q: Question) => {
+    
     if (!q.required) return true
     const answer = answers[q.id]
-    return answer !== undefined && answer !== null && answer.trim() !== ''
-  }
+    if (!answer || answer.trim() === '') return false
+    
+
+    // Enforce selection limits for checkboxes
+    if (q.type === 'checkbox' || q.type === 'checkboxes') {
+      const limit = (q as any).selectionLimit
+      const count = (q as any).selectionCount
+      const selected = answer?.split(',').filter(Boolean).length ?? 0
+      if (limit === 'min' && count && selected < count) return false
+      if (limit === 'exact' && count && selected !== count) return false
+    }
+
+    return true
+}
 
   const canAdvance = !current?.required || isAnswered(current)
 
@@ -170,16 +183,50 @@ export default function SurveyFlow({
               {/* Options - Single Select (Radio) */}
               {(current.type === 'single_select' || current.type === 'radio' || current.type === 'multiple_choice') && (
                 <div className="space-y-2">
-                  {current.options.sort((a, b) => a.order - b.order).map(opt => (
-                    <Button
-                      key={opt.value_key}
-                      onClick={() => handleAnswer(current.id, opt.value_key)}
-                      variant={answers[current.id] === opt.value_key ? 'default' : 'outline'}
-                      className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
-                    >
-                      {opt.label}
-                    </Button>
-                  ))}
+                  {current.options.sort((a, b) => a.order - b.order).map(opt => {
+                    const isOther = opt.value_key === '__other__'
+                    const isSelected = isOther
+                      ? answers[current.id]?.startsWith('__other__:')
+                      : answers[current.id] === opt.value_key
+
+                    return (
+                      <div key={opt.value_key}>
+                       {isOther ? (
+                        <Button
+                          variant={isSelected ? 'default' : 'outline'}
+                          className="w-full justify-start px-4 py-2 rounded-xl h-auto"
+                          onClick={() => {
+                            if (!isSelected) handleAnswer(current.id, '__other__:')
+                          }}
+                        >
+                          <span className="shrink-0 text-sm font-medium">Other:</span>
+                          <input
+                            type="text"
+                            value={answers[current.id]?.startsWith('__other__:') ? answers[current.id].replace('__other__:', '') : ''}
+                            onFocus={() => {
+                              if (!isSelected) handleAnswer(current.id, '__other__:')
+                            }}
+                            onChange={e => {
+                              e.stopPropagation()
+                              handleAnswer(current.id, `__other__:${e.target.value}`)
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            placeholder="Please specify..."
+                            className={`flex-1 text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
+                          />
+                        </Button>
+                      ) : (
+                          <Button
+                            onClick={() => handleAnswer(current.id, opt.value_key)}
+                            variant={isSelected ? 'default' : 'outline'}
+                            className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
+                          >
+                            {opt.label}
+                          </Button>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 
@@ -187,29 +234,89 @@ export default function SurveyFlow({
               {(current.type === 'checkbox' || current.type === 'checkboxes') && (
                 <div className="space-y-2">
                   {current.options.sort((a, b) => a.order - b.order).map(opt => {
-                    const currentAnswers = answers[current.id]?.split(',') || []
-                    const isSelected = currentAnswers.includes(opt.value_key)
+                    const currentAnswers = answers[current.id]?.split(',').filter(Boolean) || []
+                    const isOther = opt.value_key === '__other__'
+                    const isSelected = isOther
+                      ? currentAnswers.some(a => a.startsWith('__other__:'))
+                      : currentAnswers.includes(opt.value_key)
+
+                    const limit = (current as any).selectionLimit
+                    const count = (current as any).selectionCount
+                    const maxReached = (limit === 'max' || limit === 'exact') && count && currentAnswers.length >= count
+
                     return (
-                      <Button
-                        key={opt.value_key}
-                        onClick={() => {
-                          let newAnswers: string[]
-                          if (isSelected) {
-                            newAnswers = currentAnswers.filter(a => a !== opt.value_key)
-                          } else {
-                            newAnswers = [...currentAnswers, opt.value_key]
-                          }
-                          handleAnswer(current.id, newAnswers.join(','))
-                        }}
-                        variant={isSelected ? 'default' : 'outline'}
-                        className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
-                      >
-                        {opt.label}
-                      </Button>
+                      <div key={opt.value_key}>
+                        {isOther ? (
+                          <Button
+                            variant={isSelected ? 'default' : 'outline'}
+                            className="w-full justify-start px-4 py-2 rounded-xl h-auto"
+                            onClick={() => {
+                              if (!isSelected && !maxReached) {
+                                const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                handleAnswer(current.id, [...without, '__other__:'].join(','))
+                              } else if (isSelected) {
+                                const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                handleAnswer(current.id, without.join(','))
+                              }
+                            }}
+                          >
+                            <span className="shrink-0 text-sm font-medium">Other:</span>
+                            <input
+                              type="text"
+                              value={currentAnswers.find(a => a.startsWith('__other__:'))?.replace('__other__:', '') ?? ''}
+                              onFocus={() => {
+                                if (!isSelected && !maxReached) {
+                                  const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                  handleAnswer(current.id, [...without, '__other__:'].join(','))
+                                }
+                              }}
+                              onChange={e => {
+                                e.stopPropagation()
+                                const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                handleAnswer(current.id, [...without, `__other__:${e.target.value}`].join(','))
+                              }}
+                              onClick={e => e.stopPropagation()}
+                              placeholder="Please specify..."
+                              className={`flex-1 text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
+                            />
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => {
+                              if (!isSelected && maxReached) return
+                              const newAnswers = isSelected
+                                ? currentAnswers.filter(a => a !== opt.value_key)
+                                : [...currentAnswers, opt.value_key]
+                              handleAnswer(current.id, newAnswers.join(','))
+                            }}
+                            disabled={!isSelected && !!maxReached}
+                            variant={isSelected ? 'default' : 'outline'}
+                            className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
+                          >
+                            {opt.label}
+                          </Button>
+                        )}
+                      </div>
                     )
                   })}
+
+                  {/* Helper text */}
+                  {(() => {
+                    const limit = (current as any).selectionLimit
+                    const count = (current as any).selectionCount
+                    if (!limit || limit === 'unlimited' || !count) return null
+                    const currentAnswers = answers[current.id]?.split(',').filter(Boolean) || []
+
+                    const messages = {
+                      max: `Select up to ${count} option(s)`,
+                      min: `Select at least ${count} option(s) — ${currentAnswers.length} selected`,
+                      exact: `Select exactly ${count} option(s) — ${currentAnswers.length} selected`,
+                    }
+                    return <p className="text-xs text-gray-400 mt-1">{messages[limit as 'max'|'min'|'exact']}</p>
+                  })()}
                 </div>
               )}
+
 
               {/* Dropdown Select */}
               {current.type === 'dropdown' && (
@@ -445,39 +552,43 @@ export default function SurveyFlow({
               )}
             </div>
           )}
+
+          {/* Navigation */}
+          <div className="bg-white border-t border-gray-200 px-6 py-4 mt-1 rounded-3xl shadow-md">
+            <div className="max-w-xl mx-auto flex gap-3">
+              {currentIndex > 0 && (
+                <Button
+                  variant={'outline'}
+                  onClick={handleBack}
+                >
+                  ← Back
+                </Button>
+              )}
+              {currentIndex < allQuestions.length - 1 ? (
+                <Button
+                  onClick={handleNext}
+                  disabled={!canAdvance}
+                  className="flex-1"
+                >
+                  Next →
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSubmit}
+                  disabled={submitting || !canAdvance}
+                  className="flex-1"
+                >
+                  {submitting ? 'Submitting…' : 'Submit Response'}
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
+
+      
       </div>
 
-      {/* Navigation */}
-      <div className="bg-white border-t border-gray-200 px-6 py-4">
-        <div className="max-w-xl mx-auto flex gap-3">
-          {currentIndex > 0 && (
-            <Button
-              variant={'outline'}
-              onClick={handleBack}
-            >
-              ← Back
-            </Button>
-          )}
-          {currentIndex < allQuestions.length - 1 ? (
-            <Button
-              onClick={handleNext}
-              disabled={!canAdvance}
-              className="flex-1"
-            >
-              Next →
-            </Button>
-          ) : (
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting || !canAdvance}
-              className="flex-1"
-            >
-              {submitting ? 'Submitting…' : 'Submit Response'}
-            </Button>
-          )}
-        </div>
-      </div>
+
     </div>
   )
 }
