@@ -40,10 +40,23 @@ export default function SurveyFlow({
   const progress = ((currentIndex) / allQuestions.length) * 100
 
   const isAnswered = (q: Question) => {
+    
     if (!q.required) return true
     const answer = answers[q.id]
-    return answer !== undefined && answer !== null && answer.trim() !== ''
-  }
+    if (!answer || answer.trim() === '') return false
+    
+
+    // Enforce selection limits for checkboxes
+    if (q.type === 'checkbox' || q.type === 'checkboxes') {
+      const limit = (q as any).selectionLimit
+      const count = (q as any).selectionCount
+      const selected = answer?.split(',').filter(Boolean).length ?? 0
+      if (limit === 'min' && count && selected < count) return false
+      if (limit === 'exact' && count && selected !== count) return false
+    }
+
+    return true
+}
 
   const canAdvance = !current?.required || isAnswered(current)
 
@@ -187,12 +200,21 @@ export default function SurveyFlow({
               {(current.type === 'checkbox' || current.type === 'checkboxes') && (
                 <div className="space-y-2">
                   {current.options.sort((a, b) => a.order - b.order).map(opt => {
-                    const currentAnswers = answers[current.id]?.split(',') || []
+                    const currentAnswers = answers[current.id]?.split(',').filter(Boolean) || []
                     const isSelected = currentAnswers.includes(opt.value_key)
+                    const limit = (current as any).selectionLimit
+                    const count = (current as any).selectionCount
+
+                    const maxReached =
+                      (limit === 'max' || limit === 'exact') &&
+                      count &&
+                      currentAnswers.length >= count
+
                     return (
                       <Button
                         key={opt.value_key}
                         onClick={() => {
+                          if (!isSelected && maxReached) return
                           let newAnswers: string[]
                           if (isSelected) {
                             newAnswers = currentAnswers.filter(a => a !== opt.value_key)
@@ -201,6 +223,7 @@ export default function SurveyFlow({
                           }
                           handleAnswer(current.id, newAnswers.join(','))
                         }}
+                        disabled={!isSelected && !!maxReached}
                         variant={isSelected ? 'default' : 'outline'}
                         className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
                       >
@@ -208,8 +231,24 @@ export default function SurveyFlow({
                       </Button>
                     )
                   })}
+
+                  {/* Helper text */}
+                  {(() => {
+                    const limit = (current as any).selectionLimit
+                    const count = (current as any).selectionCount
+                    if (!limit || limit === 'unlimited' || !count) return null
+                    const currentAnswers = answers[current.id]?.split(',').filter(Boolean) || []
+
+                    const messages = {
+                      max: `Select up to ${count} option(s)`,
+                      min: `Select at least ${count} option(s) — ${currentAnswers.length} selected`,
+                      exact: `Select exactly ${count} option(s) — ${currentAnswers.length} selected`,
+                    }
+                    return <p className="text-xs text-gray-400 mt-1">{messages[limit as 'max'|'min'|'exact']}</p>
+                  })()}
                 </div>
               )}
+
 
               {/* Dropdown Select */}
               {current.type === 'dropdown' && (
@@ -445,39 +484,43 @@ export default function SurveyFlow({
               )}
             </div>
           )}
+
+          {/* Navigation */}
+          <div className="bg-white border-t border-gray-200 px-6 py-4 mt-1 rounded-3xl shadow-md">
+            <div className="max-w-xl mx-auto flex gap-3">
+              {currentIndex > 0 && (
+                <Button
+                  variant={'outline'}
+                  onClick={handleBack}
+                >
+                  ← Back
+                </Button>
+              )}
+              {currentIndex < allQuestions.length - 1 ? (
+                <Button
+                  onClick={handleNext}
+                  disabled={!canAdvance}
+                  className="flex-1"
+                >
+                  Next →
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSubmit}
+                  disabled={submitting || !canAdvance}
+                  className="flex-1"
+                >
+                  {submitting ? 'Submitting…' : 'Submit Response'}
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
+
+      
       </div>
 
-      {/* Navigation */}
-      <div className="bg-white border-t border-gray-200 px-6 py-4">
-        <div className="max-w-xl mx-auto flex gap-3">
-          {currentIndex > 0 && (
-            <Button
-              variant={'outline'}
-              onClick={handleBack}
-            >
-              ← Back
-            </Button>
-          )}
-          {currentIndex < allQuestions.length - 1 ? (
-            <Button
-              onClick={handleNext}
-              disabled={!canAdvance}
-              className="flex-1"
-            >
-              Next →
-            </Button>
-          ) : (
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting || !canAdvance}
-              className="flex-1"
-            >
-              {submitting ? 'Submitting…' : 'Submit Response'}
-            </Button>
-          )}
-        </div>
-      </div>
+
     </div>
   )
 }
