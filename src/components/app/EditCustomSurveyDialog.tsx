@@ -19,8 +19,6 @@ interface CustomQuestion {
   scaleMax?: number
   minLabel?: string
   maxLabel?: string
-  selectionLimit?: 'unlimited' | 'max' | 'min' | 'exact'
-  selectionCount?: number
 }
 
 interface Props {
@@ -56,11 +54,6 @@ function parseQuestionsFromSnapshot(snapshot: any): CustomQuestion[] {
         minLabel: q.minLabel ?? 'Low',
         maxLabel: q.maxLabel ?? 'High',
       } : {}),
-
-        ...(type === 'checkboxes' ? {
-          selectionLimit: q.selectionLimit ?? 'unlimited',
-          selectionCount: q.selectionCount ?? undefined,
-        } : {}),
     }
   })
 }
@@ -101,7 +94,6 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
         ? { options: ['Option 1', 'Option 2'] }
         : {}),
       ...(type === 'linear_scale' ? { scaleMin: 1, scaleMax: 5, minLabel: 'Low', maxLabel: 'High' } : {}),
-      ...(type === 'checkboxes' ? { selectionLimit: 'unlimited', selectionCount: undefined } : {}),
     }
     setQuestions(prev => [...prev, newQ])
     setEditingQuestionId(newQ.id)
@@ -177,10 +169,6 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                     minLabel: q.minLabel,
                     maxLabel: q.maxLabel,
                   }
-                : {}),
-
-              ...(q.type === 'checkboxes' && q.selectionLimit && q.selectionLimit !== 'unlimited'
-                ? { selectionLimit: q.selectionLimit, selectionCount: q.selectionCount }
                 : {}),
             })),
           },
@@ -481,52 +469,6 @@ function QuestionEditor({
                 >
                   + Add Option
                 </button>
-              </div>
-            )}
-
-            {question.type === 'checkboxes' && isEditing && (
-             <div className="flex flex-row justify-between items-center mt-2">
-                <select
-                  value={question.selectionLimit ?? 'unlimited'}
-                  onChange={e =>
-                    onUpdate({
-                      selectionLimit: e.target.value as CustomQuestion['selectionLimit'],
-                      selectionCount: undefined,
-                    })
-                  }
-                  className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                >
-                  <option value="unlimited">Unlimited selections</option>
-                  <option value="max">Maximum selections</option>
-                  <option value="min">Minimum selections</option>
-                  <option value="exact">Exact selections</option>
-                </select>
-
-                {question.selectionLimit && question.selectionLimit !== 'unlimited' && (
-                  <input
-                    type="number"
-                    min={1}
-                    max={(question.options ?? []).length}
-                    value={question.selectionCount ?? ''}
-                    onChange={e => {
-                      const max = (question.options ?? []).length
-                      const val = parseInt(e.target.value)
-                      if (isNaN(val)) {
-                        onUpdate({ selectionCount: undefined })
-                        return
-                      }
-                      onUpdate({
-                        selectionCount: val > max ? max : val < 1 ? 1 : val
-                      })
-                    }}
-                    placeholder={
-                      question.selectionLimit === 'max' ? 'Max number...' :
-                      question.selectionLimit === 'min' ? 'Min number...' :
-                      'Exact number...'
-                    }
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                )}
               </div>
             )}
 
