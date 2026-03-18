@@ -392,8 +392,16 @@ function QuestionEditor({
 
   const addOption = () => {
     const current = question.options ?? []
-    onUpdate({ options: [...current, `Option ${current.length + 1}`] })
-  }
+    const hasOther = current.includes('__other__')
+    
+    if (hasOther) {
+      // Insert questions before other option so that its always at the end of the list of options
+      const without = current.filter(o => o !== '__other__')
+      onUpdate({ options: [...without, `Option ${without.length + 1}`, '__other__'] })
+    } else {
+      onUpdate({ options: [...current, `Option ${current.length + 1}`] })
+    }
+}
 
   const updateOption = (i: number, value: string) => {
     const opts = [...(question.options ?? [])]
@@ -457,14 +465,21 @@ function QuestionEditor({
                 {(question.options ?? []).map((opt, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <span className="text-xs text-gray-400">{i + 1}.</span>
-                    <input
-                      id={`opt-${question.id}-${i}`}
-                      name={`opt_${question.id}_${i}`}
-                      type="text"
-                      value={opt}
-                      onChange={e => updateOption(i, e.target.value)}
-                      className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
-                    />
+                    {opt === '__other__' ? (
+                      // read only row for "Other" 
+                      <div className="flex-1 px-2 py-1 border border-dashed border-gray-300 rounded text-sm text-gray-400 italic">
+                        Other: ___________
+                      </div>
+                    ) : (
+                      <input
+                        id={`opt-${question.id}-${i}`}
+                        name={`opt_${question.id}_${i}`}
+                        type="text"
+                        value={opt}
+                        onChange={e => updateOption(i, e.target.value)}
+                        className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
+                      />
+                    )}
                     {(question.options ?? []).length > 2 && (
                       <button
                         onClick={() => removeOption(i)}
@@ -481,6 +496,16 @@ function QuestionEditor({
                 >
                   + Add Option
                 </button>
+
+                {/* Add Other Option */}
+                  {question.type !== 'dropdown' && !(question.options ?? []).includes('__other__') && (
+                    <button
+                      onClick={() => onUpdate({ options: [...(question.options ?? []), '__other__'] })}
+                      className="text-xs text-gray-500 hover:text-gray-700 font-medium ml-3"
+                    >
+                      + Add Other
+                    </button>
+                  )}
               </div>
             )}
 
