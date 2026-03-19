@@ -414,7 +414,7 @@ export default function SectionEditor({
                                   >
                                     + Add Option
                                   </button>
-                                  {!q.options.some((o: any) => o.value_key === '__other__') && (
+                                  {q.type !== 'dropdown' && !q.options.some((o: any) => o.value_key === '__other__') && (
                                     <button
                                       onClick={() => {
                                         // Add "Other" option directly with special value_key
