@@ -519,23 +519,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                   </div>
 
                   {/* Live Preview */}
-                  {(title || description) && (
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
-                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Preview</p>
-                      {title && (
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{title}</p>
-                        </div>
-                      )}
-                      {description && (
-                        <div className="text-xs text-gray-700 whitespace-pre-wrap">
-                          {typeof description === 'string'
-                            ? description
-                            : renderRichText(description)}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                
 
                   {/* Sections Management */}
                   {sections.length > 0 && (
