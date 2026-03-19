@@ -8,6 +8,54 @@ interface Question {
   id: string; type: string; prompt: string; required: boolean; order: number; options: Option[]
   scaleMin?: number; scaleMax?: number; minLabel?: string; maxLabel?: string
 }
+
+// Simple option button component that doesn't rely on responsive classes
+const OptionButton = ({ 
+  label, 
+  isSelected, 
+  onClick, 
+  disabled = false,
+  variant = 'outline'
+}: { 
+  label: string; 
+  isSelected: boolean; 
+  onClick: () => void; 
+  disabled?: boolean;
+  variant?: 'default' | 'outline'
+}) => {
+  const baseStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '10px 12px',
+    textAlign: 'left',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    backgroundColor: isSelected ? '#3b82f6' : '#ffffff',
+    color: isSelected ? '#ffffff' : '#000000',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    transition: 'all 0.2s ease',
+    opacity: disabled ? 0.5 : 1,
+    wordBreak: 'break-word',
+    whiteSpace: 'normal',
+    minHeight: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  }
+  
+  return (
+    <div style={{ marginBottom: '10px' }}>
+      <button 
+        onClick={onClick} 
+        disabled={disabled}
+        style={baseStyle}
+      >
+        {label}
+      </button>
+    </div>
+  )
+}
 interface RichTextContent { text: string; marks?: any[] }
 interface Category { id: string; name: string; order: number; questions: Question[]; description?: string | RichTextContent }
 interface Snapshot { packName: string; version: string; categories: Category[]; ai_generated?: boolean; description?: string | null }
@@ -297,51 +345,61 @@ export default function SurveyFlow({
 
                       {/* Render question type */}
                       {(question.type === 'single_select' || question.type === 'radio' || question.type === 'multiple_choice') && (
-                        <div className="space-y-3">
+                        <div>
                           {question.options.sort((a, b) => a.order - b.order).map(opt => {
                             const isOther = opt.value_key === '__other__'
                             const isSelected = isOther
                               ? answers[question.id]?.startsWith('__other__:')
                               : answers[question.id] === opt.value_key
 
-                            return (
-                              <div key={opt.value_key} style={{ padding: 'max(8px, 2vw) 0' }}>
-                                {isOther ? (
-                                  <Button
-                                    variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full flex flex-wrap items-center gap-1 px-3 py-2 rounded-lg h-auto text-xs border text-left"
-                                    style={{ minHeight: '2.5rem' }}
+                            return isOther ? (
+                              <div key={opt.value_key} style={{ marginBottom: '10px' }}>
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  width: '100%',
+                                  padding: '10px 12px',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '8px',
+                                  backgroundColor: isSelected ? '#3b82f6' : '#ffffff',
+                                  cursor: 'pointer',
+                                  minHeight: '40px',
+                                }}>
+                                  <label style={{ fontSize: '14px', fontWeight: 500, whiteSpace: 'nowrap', color: isSelected ? '#ffffff' : '#000000' }}>Other:</label>
+                                  <input
+                                    type="text"
+                                    value={answers[question.id]?.startsWith('__other__:') ? answers[question.id].replace('__other__:', '') : ''}
+                                    onFocus={() => {
+                                      if (!isSelected) handleAnswer(question.id, '__other__:')
+                                    }}
+                                    onChange={e => {
+                                      handleAnswer(question.id, `__other__:${e.target.value}`)
+                                    }}
                                     onClick={() => {
                                       if (!isSelected) handleAnswer(question.id, '__other__:')
                                     }}
-                                  >
-                                    <span className="font-medium whitespace-nowrap">Other:</span>
-                                    <input
-                                      type="text"
-                                      value={answers[question.id]?.startsWith('__other__:') ? answers[question.id].replace('__other__:', '') : ''}
-                                      onFocus={() => {
-                                        if (!isSelected) handleAnswer(question.id, '__other__:')
-                                      }}
-                                      onChange={e => {
-                                        e.stopPropagation()
-                                        handleAnswer(question.id, `__other__:${e.target.value}`)
-                                      }}
-                                      onClick={e => e.stopPropagation()}
-                                      placeholder="Please specify..."
-                                      className={`flex-1 min-w-[80px] text-xs focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
-                                    />
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    onClick={() => handleAnswer(question.id, opt.value_key)}
-                                    variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-3 py-2 rounded-lg text-xs transition-all border h-auto whitespace-normal text-left"
-                                    style={{ minHeight: '2.5rem' }}
-                                  >
-                                    {opt.label}
-                                  </Button>
-                                )}
+                                    placeholder="Please specify..."
+                                    style={{
+                                      flex: 1,
+                                      border: 'none',
+                                      outline: 'none',
+                                      backgroundColor: 'transparent',
+                                      color: isSelected ? '#ffffff' : '#000000',
+                                      fontSize: '14px',
+                                      fontFamily: 'inherit',
+                                      minWidth: '80px',
+                                    }}
+                                  />
+                                </div>
                               </div>
+                            ) : (
+                              <OptionButton
+                                key={opt.value_key}
+                                label={opt.label}
+                                isSelected={isSelected}
+                                onClick={() => handleAnswer(question.id, opt.value_key)}
+                              />
                             )
                           })}
                         </div>
@@ -349,7 +407,7 @@ export default function SurveyFlow({
 
                       {/* Checkboxes */}
                       {(question.type === 'checkbox' || question.type === 'checkboxes') && (
-                        <div className="space-y-3">
+                        <div>
                           {question.options.sort((a, b) => a.order - b.order).map(opt => {
                             const currentAnswers = answers[question.id]?.split(',').filter(Boolean) || []
                             const isOther = opt.value_key === '__other__'
@@ -360,63 +418,72 @@ export default function SurveyFlow({
                             const count = (question as any).selectionLimit?.count
                             const maxReached = (limit === 'max' || limit === 'exact') && count && currentAnswers.length >= count
 
-                            return (
-                              <div key={opt.value_key} style={{ padding: 'max(8px, 2vw) 0' }}>
-                                {isOther ? (
-                                  <Button
-                                    variant={isSelected ? 'default' : 'outline'}
-                                    disabled={!isSelected && !!maxReached}
-                                    className="w-full flex flex-wrap items-center gap-1 px-3 py-2 rounded-lg h-auto text-xs border text-left"
-                                    style={{ minHeight: '2.5rem' }}
+                            return isOther ? (
+                              <div key={opt.value_key} style={{ marginBottom: '10px' }}>
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  width: '100%',
+                                  padding: '10px 12px',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '8px',
+                                  backgroundColor: isSelected ? '#3b82f6' : '#ffffff',
+                                  cursor: maxReached && !isSelected ? 'not-allowed' : 'pointer',
+                                  minHeight: '40px',
+                                  opacity: maxReached && !isSelected ? 0.6 : 1,
+                                }}>
+                                  <label style={{ fontSize: '14px', fontWeight: 500, whiteSpace: 'nowrap', color: isSelected ? '#ffffff' : '#000000' }}>Other:</label>
+                                  <input
+                                    type="text"
+                                    disabled={maxReached && !isSelected}
+                                    value={currentAnswers.find(a => a.startsWith('__other__:'))?.replace('__other__:', '') ?? ''}
+                                    onFocus={() => {
+                                      if (!isSelected && maxReached) return
+                                      if (!isSelected) {
+                                        const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                        handleAnswer(question.id, [...without, '__other__:'].join(','))
+                                      }
+                                    }}
+                                    onChange={e => {
+                                      const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                      handleAnswer(question.id, [...without, `__other__:${e.target.value}`].join(','))
+                                    }}
                                     onClick={() => {
                                       if (!isSelected && maxReached) return
                                       if (!isSelected) {
                                         const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
                                         handleAnswer(question.id, [...without, '__other__:'].join(','))
-                                      } else if (isSelected) {
-                                        const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
-                                        handleAnswer(question.id, without.join(','))
                                       }
                                     }}
-                                  >
-                                    <span className="font-medium whitespace-nowrap">Other:</span>
-                                    <input
-                                      type="text"
-                                      value={currentAnswers.find(a => a.startsWith('__other__:'))?.replace('__other__:', '') ?? ''}
-                                      onFocus={() => {
-                                        if (!isSelected && maxReached) return
-                                        if (!isSelected) {
-                                          const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
-                                          handleAnswer(question.id, [...without, '__other__:'].join(','))
-                                        }
-                                      }}
-                                      onChange={e => {
-                                        e.stopPropagation()
-                                        const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
-                                        handleAnswer(question.id, [...without, `__other__:${e.target.value}`].join(','))
-                                      }}
-                                      onClick={e => e.stopPropagation()}
-                                      placeholder="Please specify..."
-                                      className={`flex-1 min-w-[80px] text-xs focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
-                                    />
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    onClick={() => {
-                                      if (!isSelected && maxReached) return
-                                      const newAnswers = isSelected
-                                        ? currentAnswers.filter(a => a !== opt.value_key)
-                                        : [...currentAnswers, opt.value_key]
-                                      handleAnswer(question.id, newAnswers.join(','))
+                                    placeholder="Please specify..."
+                                    style={{
+                                      flex: 1,
+                                      border: 'none',
+                                      outline: 'none',
+                                      backgroundColor: 'transparent',
+                                      color: isSelected ? '#ffffff' : '#000000',
+                                      fontSize: '14px',
+                                      fontFamily: 'inherit',
+                                      minWidth: '80px',
                                     }}
-                                    disabled={!isSelected && !!maxReached}
-                                    variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-3 py-2 rounded-lg text-xs transition-all border h-auto whitespace-normal text-left"
-                                    style={{ minHeight: '2.5rem' }}
-                                  >
-                                    {opt.label}
-                                  </Button>
-                                )}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <div key={opt.value_key} style={{ marginBottom: '10px' }}>
+                                <OptionButton
+                                  label={opt.label}
+                                  isSelected={isSelected}
+                                  disabled={maxReached && !isSelected}
+                                  onClick={() => {
+                                    if (!isSelected && maxReached) return
+                                    const newAnswers = isSelected
+                                      ? currentAnswers.filter(a => a !== opt.value_key)
+                                      : [...currentAnswers, opt.value_key]
+                                    handleAnswer(question.id, newAnswers.join(','))
+                                  }}
+                                />
                               </div>
                             )
                           })}
@@ -500,13 +567,14 @@ export default function SurveyFlow({
                         <input type="number" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Enter a number…" className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       )}
                       {question.type === 'yes_no' && (
-                        <div className="space-y-3">
+                        <div>
                           {['Yes', 'No'].map(opt => (
-                            <div key={opt.toLowerCase()} style={{ padding: 'max(8px, 2vw) 0' }}>
-                              <Button onClick={() => handleAnswer(question.id, opt.toLowerCase())} variant={answers[question.id] === opt.toLowerCase() ? 'default' : 'outline'} className="w-full justify-start px-3 py-2 rounded-lg text-xs border h-auto text-left" style={{ minHeight: '2.5rem' }}>
-                                {opt}
-                              </Button>
-                            </div>
+                            <OptionButton
+                              key={opt.toLowerCase()}
+                              label={opt}
+                              isSelected={answers[question.id] === opt.toLowerCase()}
+                              onClick={() => handleAnswer(question.id, opt.toLowerCase())}
+                            />
                           ))}
                         </div>
                       )}
