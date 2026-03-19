@@ -17,74 +17,130 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! })
 
 /* ── Groq prompt ─────────────────────────────────────────── */
 function buildPrompt(surveyDescription: string): string {
-  return `You are an expert survey designer. Create a comprehensive, well-structured survey based on the following description.
+  return `You are an expert survey designer specializing in creating user-friendly, multi-format surveys similar to Google Forms. 
+Your task is to create a comprehensive, well-structured survey based on the user's description below.
 
 SURVEY DESCRIPTION:
 ${surveyDescription}
 
-Design a survey with 2-5 thematic categories, each containing 3-6 questions.
-Choose question types that best fit the content and any preferences stated in the description.
+DESIGN REQUIREMENTS:
+- Organize the survey into 2-5 thematic categories (logical groupings)
+- Each category should contain 3-6 focused questions
+- Select question types strategically based on the type of data you want to collect
+- Ensure responses will flow logically and feel engaging (not repetitive)
+- Choose required vs. optional questions appropriately
+- For selection-based questions (multiple_choice, checkboxes, dropdown):
+  * Include 2-5 distinct options per question
+  * Options should be mutually exclusive where appropriate
+  * NO "other" field needed — backend will handle it separately if needed
+- For linear_scale questions: pick a scale range (1-5 is most common, but 1-7 or 1-10 are also good)
+- Use the exact value_key format (snake_case) for backend compatibility
 
-AVAILABLE QUESTION TYPES:
-- short_text: Free-text single-line answer
-- long_text: Free-text multi-line answer
-- multiple_choice: Pick exactly one option from a list
-- checkboxes: Pick one or more options from a list
-- dropdown: Pick one option from a dropdown
-- linear_scale: Rate on a numeric scale
-- yes_no: Simple Yes or No
-- email: Email address input
-- url: Website URL input
-- date: Date input
-- time: Time input
-- number: Numeric input
+AVAILABLE QUESTION TYPES WITH EXAMPLES:
 
-IMPORTANT — respond ONLY with valid JSON in exactly this structure (no markdown fences, no extra text):
+1. short_text: Single-line text input (e.g., "What is your name?")
+2. long_text: Multi-line text area (e.g., "Tell us about your experience...")
+3. multiple_choice: Radio buttons — select ONE option (e.g., "How often do you use this product? Weekly / Monthly / Rarely")
+4. checkboxes: Checkboxes — select MULTIPLE options (e.g., "What features do you use most?")
+5. dropdown: Select dropdown — pick ONE from a list (e.g., "What is your industry?")
+6. linear_scale: Likert scale or numeric rating (e.g., "Rate your satisfaction: 1=Very Dissatisfied ... 5=Very Satisfied")
+7. yes_no: Binary choice (e.g., "Have you used this feature before? Yes / No")
+8. email: Email field (e.g., "What is your email address?")
+9. url: URL field (e.g., "Where can we learn more about your company?")
+10. date: Date picker (e.g., "When did you start using our service?")
+11. time: Time picker (e.g., "What time of day do you typically use this?")
+12. number: Numeric input (e.g., "How many team members do you have?")
+
+RESPONSE FORMAT:
+Return ONLY valid JSON (no markdown code blocks, no extra text) in this exact structure:
+
 {
-  "surveyTitle": "string",
+  "surveyTitle": "Descriptive Survey Title",
   "categories": [
     {
-      "name": "string",
+      "name": "Category Name",
+      "description": "Brief context about this section (optional)",
       "questions": [
         {
           "type": "short_text",
-          "prompt": "string",
+          "prompt": "Your question text here?",
           "required": true
         },
         {
           "type": "multiple_choice",
-          "prompt": "string",
+          "prompt": "Your question text here?",
           "required": true,
           "options": [
-            { "label": "string", "value_key": "snake_case_string" }
+            { "label": "Option A", "value_key": "option_a" },
+            { "label": "Option B", "value_key": "option_b" },
+            { "label": "Option C", "value_key": "option_c" }
           ]
         },
         {
           "type": "linear_scale",
-          "prompt": "string",
-          "required": true,
+          "prompt": "Your question text here?",
+          "required": false,
           "scaleMin": 1,
           "scaleMax": 5,
-          "minLabel": "string",
-          "maxLabel": "string"
+          "minLabel": "Strongly Disagree",
+          "maxLabel": "Strongly Agree"
+        },
+        {
+          "type": "checkboxes",
+          "prompt": "Your question text here? (select all that apply)",
+          "required": false,
+          "options": [
+            { "label": "Choice A", "value_key": "choice_a" },
+            { "label": "Choice B", "value_key": "choice_b" }
+          ]
         },
         {
           "type": "yes_no",
-          "prompt": "string",
+          "prompt": "Your question text here?",
           "required": true
+        },
+        {
+          "type": "email",
+          "prompt": "What is your email?",
+          "required": false
+        },
+        {
+          "type": "date",
+          "prompt": "When would you like to schedule this?",
+          "required": false
         }
       ]
     }
   ]
 }
 
-Strict rules — violating any rule will break the survey:
-- For multiple_choice, checkboxes, dropdown: include an options array with 2-5 items. value_key must be snake_case and unique within the question.
-- For linear_scale: scaleMin must be 1, scaleMax between 3 and 10. Always include minLabel and maxLabel describing the endpoints. Do NOT include an options array.
-- For short_text, long_text, email, url, date, time, number, yes_no: do NOT include an options array.
-- Keep question prompts concise, clear, and directly relevant.
-- Category names should be thematic and professional.
-- Honor any persona, length, tone, question-type mix, or constraints mentioned in the description.`
+STRICT DATA VALIDATION RULES:
+1. For multiple_choice, checkboxes, dropdown: 
+   • MUST include "options" array with 2-5 items
+   • Each option MUST have "label" (display text) and "value_key" (unique snake_case identifier)
+   • Example: { "label": "Very Satisfied", "value_key": "very_satisfied" }
+   
+2. For linear_scale:
+   • MUST include: scaleMin (typically 1), scaleMax (3-10), minLabel, maxLabel
+   • DO NOT include an "options" array
+   • Example: { "type": "linear_scale", "scaleMin": 1, "scaleMax": 5, "minLabel": "Low", "maxLabel": "High" }
+   
+3. For short_text, long_text, email, url, date, time, number, yes_no:
+   • DO NOT include an "options" array
+   
+4. All question types support "required" (boolean)
+5. Category names should be clear, professional, and relate to the question set
+6. Keep question prompts concise (under 120 characters ideally)
+7. Question order should flow logically (general → specific, easier → harder)
+
+QUALITY GUIDELINES:
+- Avoid leading, biased, or ambiguous questions
+- Use consistent language and tone throughout
+- No jargon unless explained in context
+- For sensitive topics, offer "Prefer not to answer" as a multiple_choice option if appropriate
+- Honor persona, tone, and constraints specified in the description
+- If persona says "professional," use formal language; if "conversational," be friendly
+- If length constraint is mentioned (e.g., "3-5 minutes"), aim for 12-20 questions total`
 }
 
 /* ── Snapshot builder ──────────────────────────────────────── */

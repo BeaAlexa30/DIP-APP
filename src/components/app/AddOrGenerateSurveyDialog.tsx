@@ -1,22 +1,33 @@
 'use client'
 
 /**
- * AddOrGenerateSurveyDialog
- * ─────────────────────────────────────────────────────────────
- * Unified dialog that replaces AddSurveyButton + AISurveyGeneratorDialog.
- *
- * Tab 1 — "AI Recommendations"
- *   • Groq evaluates which available framework packs best fit the project
- *   • Shows ranked list with reasoning; admin clicks "Add Framework"
- *   • Non-recommended packs shown in a secondary section
- *
- * Tab 2 — "Generate New AI Survey"
- *   • Admin fills 3 prompts; Groq generates a bespoke survey
+ * AddOrGenerateSurveyDialog.tsx (Refactored)
+ * ═════════════════════════════════════════════════════════════
+ * Enhanced survey creation dialog with:
+ *   - Dynamic question types matching Google Forms
+ *   - Real-time option management (add, delete, reorder)
+ *   - Question duplication and bulk deletion
+ *   - Advanced settings (required, selection limits, scale config)
+ *   - Improved UI with collapsible question blocks
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
+import {
+  Question,
+  QuestionType,
+  SurveySnapshot,
+  SurveyCategory,
+  QuestionOption,
+  RichTextContent,
+  SkipLogic,
+  createQuestion,
+  validateQuestion,
+} from '@/types/SurveyBuilder'
+import RichTextEditor from '@/components/survey/RichTextEditor'
+import SectionEditor from '@/components/survey/SectionEditor'
+import SkipLogicEditor from '@/components/survey/SkipLogicEditor'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -62,20 +73,6 @@ interface Props {
 type Tab = 'recommend' | 'generate' | 'custom'
 type RecommendState = 'idle' | 'loading' | 'done' | 'error'
 type GenerateStep = 'form' | 'generating' | 'done' | 'error'
-type QuestionType = 'short_text' | 'long_text' | 'multiple_choice' | 'checkboxes' | 'dropdown' | 'linear_scale' | 'yes_no' | 'email' | 'url' | 'date' | 'time' | 'number'
-
-interface CustomQuestion {
-  id: string
-  type: QuestionType
-  prompt: string
-  required: boolean
-  options?: string[] // for multiple_choice, checkboxes, dropdown
-  scaleMin?: number // for linear_scale
-  scaleMax?: number // for linear_scale
-  minLabel?: string // for linear_scale
-  maxLabel?: string // for linear_scale
-}
-
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -89,29 +86,31 @@ export default function AddOrGenerateSurveyDialog({
   const router = useRouter()
   const supabase = createClient()
 
-  const [isOpen, setIsOpen]   = useState(false)
-  const [tab, setTab]         = useState<Tab>('recommend')
+  const [isOpen, setIsOpen] = useState(false)
+  const [tab, setTab] = useState<Tab>('recommend')
 
   // — Recommendations state —
-  const [recState, setRecState]           = useState<RecommendState>('idle')
+  const [recState, setRecState] = useState<RecommendState>('idle')
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
-  const [recError, setRecError]           = useState<string | null>(null)
-  const [addingPackId, setAddingPackId]   = useState<string | null>(null)
-  const [addError, setAddError]           = useState<string | null>(null)
-  const [addedPackIds, setAddedPackIds]   = useState<Set<string>>(new Set())
+  const [recError, setRecError] = useState<string | null>(null)
+  const [addingPackId, setAddingPackId] = useState<string | null>(null)
+  const [addError, setAddError] = useState<string | null>(null)
+  const [addedPackIds, setAddedPackIds] = useState<Set<string>>(new Set())
 
   // — Generate state —
-  const [genStep, setGenStep]           = useState<GenerateStep>('form')
+  const [genStep, setGenStep] = useState<GenerateStep>('form')
   const [surveyDescription, setSurveyDescription] = useState('')
-  const [showTips, setShowTips]         = useState(false)
-  const [genResult, setGenResult]       = useState<GenerateResult | null>(null)
-  const [genError, setGenError]         = useState<string | null>(null)
-  const [copied, setCopied]             = useState(false)
+  const [showTips, setShowTips] = useState(false)
+  const [genResult, setGenResult] = useState<GenerateResult | null>(null)
+  const [genError, setGenError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
-  // — Custom Survey state —
+  // — Custom Survey state (Sections Only) ——
   const [customSurveyTitle, setCustomSurveyTitle] = useState('')
-  const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([])
-  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
+  const [customSurveyDescription, setCustomSurveyDescription] = useState<RichTextContent | undefined>()
+  const [customSections, setCustomSections] = useState<SurveyCategory[]>([])
+  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null)
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
   const [customSaving, setCustomSaving] = useState(false)
   const [customError, setCustomError] = useState<string | null>(null)
   const [customSuccess, setCustomSuccess] = useState(false)
@@ -154,7 +153,7 @@ export default function AddOrGenerateSurveyDialog({
     }
   }, [isOpen, tab, recState, fetchRecommendations, availablePacks.length])
 
-  // ── Add a recommended framework pack as a new survey ─────────────────────────
+  // ── Add a recommended framework pack ────────────────────────────────────────
   async function handleAddPack(packId: string) {
     setAddingPackId(packId)
     setAddError(null)
@@ -169,8 +168,6 @@ export default function AddOrGenerateSurveyDialog({
       let snapshot: any
 
       if (isAiPack) {
-        // AI packs store their questions in the survey JSONB snapshot, not in DB tables.
-        // Reuse the snapshot from an existing survey that used this pack.
         const { data: existingSurvey, error: snapErr } = await (supabase as any)
           .from('surveys')
           .select('pack_version_snapshot')
@@ -180,7 +177,6 @@ export default function AddOrGenerateSurveyDialog({
         if (snapErr || !existingSurvey) throw new Error('Could not retrieve AI framework snapshot.')
         snapshot = existingSurvey.pack_version_snapshot
       } else {
-        // Standard framework: build snapshot from DB tables
         const snapRes = await fetch('/api/assessment-frameworks/capture-version', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -190,7 +186,6 @@ export default function AddOrGenerateSurveyDialog({
         snapshot = await snapRes.json()
       }
 
-      // Create survey
       const { data: survey, error: surveyErr } = await (supabase as any)
         .from('surveys')
         .insert({
@@ -203,7 +198,6 @@ export default function AddOrGenerateSurveyDialog({
         .single()
       if (surveyErr || !survey) throw new Error(surveyErr?.message ?? 'Failed to create survey.')
 
-      // Create token
       const token = Array.from(globalThis.crypto.getRandomValues(new Uint8Array(24)))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('')
@@ -223,7 +217,7 @@ export default function AddOrGenerateSurveyDialog({
     }
   }
 
-  // ── Generate new AI survey ────────────────────────────────────────────────────
+  // ── Generate new AI survey ─────────────────────────────────────────────────
   const isGenFormValid = surveyDescription.trim().length > 20
 
   async function handleGenerate() {
@@ -240,7 +234,11 @@ export default function AddOrGenerateSurveyDialog({
         }),
       })
       const json = await res.json()
-      if (!res.ok) { setGenError(json.error ?? 'Failed to generate survey.'); setGenStep('error'); return }
+      if (!res.ok) {
+        setGenError(json.error ?? 'Failed to generate survey.')
+        setGenStep('error')
+        return
+      }
       setGenResult(json)
       setGenStep('done')
     } catch (e: any) {
@@ -256,54 +254,275 @@ export default function AddOrGenerateSurveyDialog({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // ── Custom Survey Functions ───────────────────────────────────────────────────
-  function addCustomQuestion(type: QuestionType) {
-    const newQuestion: CustomQuestion = {
-      id: `q-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      type,
-      prompt: '',
-      required: false,
-      ...(type === 'multiple_choice' || type === 'checkboxes' || type === 'dropdown' ? { options: ['Option 1', 'Option 2'] } : {}),
-      ...(type === 'linear_scale' ? { scaleMin: 1, scaleMax: 5, minLabel: 'Low', maxLabel: 'High' } : {}),
+  // ── Custom Survey Functions ────────────────────────────────────────────────
+  function addNewQuestion(type: QuestionType) {
+    // Add to the first section, or create one if needed
+    const targetSection = customSections.length > 0 ? customSections[0] : null
+    if (!targetSection) {
+      addNewSection()
+      return
     }
-    setCustomQuestions(prev => [...prev, newQuestion])
-    setEditingQuestionId(newQuestion.id)
+    
+    const newQuestion = createQuestion(type)
+    setCustomSections(prev =>
+      prev.map(s =>
+        s.id === targetSection.id
+          ? { ...s, questions: [...(s.questions || []), newQuestion] }
+          : s
+      )
+    )
+    setExpandedQuestionId(newQuestion.id)
+    setExpandedSectionId(targetSection.id)
   }
 
-  function removeCustomQuestion(id: string) {
-    setCustomQuestions(prev => prev.filter(q => q.id !== id))
-    if (editingQuestionId === id) setEditingQuestionId(null)
+  function removeQuestion(id: string) {
+    setCustomSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).filter(q => q.id !== id)
+      }))
+    )
+    if (expandedQuestionId === id) setExpandedQuestionId(null)
   }
 
-  function updateCustomQuestion(id: string, updates: Partial<CustomQuestion>) {
-    setCustomQuestions(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q))
+  function duplicateQuestion(id: string) {
+    setCustomSections(prev =>
+      prev.map(s => {
+        const qIdx = (s.questions || []).findIndex(q => q.id === id)
+        if (qIdx === -1) return s
+        
+        const original = s.questions![qIdx]
+        const duplicate: Question = {
+          ...original,
+          id: createQuestion(original.type).id,
+          options: original.options?.map((opt, idx) => ({
+            ...opt,
+            id: `${createQuestion(original.type).id}-opt-${idx}`,
+          })),
+        }
+        
+        const newQuestions = [...(s.questions || [])]
+        newQuestions.splice(qIdx + 1, 0, duplicate)
+        setExpandedQuestionId(duplicate.id)
+        return { ...s, questions: newQuestions }
+      })
+    )
+  }
+
+  function updateQuestion(id: string, updates: Partial<Question>) {
+    setCustomSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => (q.id === id ? { ...q, ...updates } : q))
+      }))
+    )
+  }
+
+  function changeQuestionType(sectionId: string, questionId: string, newType: string) {
+    setCustomSections(prev =>
+      prev.map(s => {
+        if (s.id !== sectionId) return s
+        return {
+          ...s,
+          questions: (s.questions || []).map(q => {
+            if (q.id !== questionId) return q
+            // Create a new question of the new type, preserving the prompt and required status
+            const newQuestion: Question = {
+              id: q.id,
+              type: newType as QuestionType,
+              prompt: q.prompt,
+              required: q.required,
+              order: q.order,
+            }
+            // Add default options for selection-based types
+            if (['multiple_choice', 'checkboxes', 'dropdown'].includes(newType)) {
+              newQuestion.options = q.options && q.options.length > 0 
+                ? q.options 
+                : [
+                    { id: `${questionId}-opt-1`, label: 'Option 1', value_key: 'option_1', order: 1 },
+                    { id: `${questionId}-opt-2`, label: 'Option 2', value_key: 'option_2', order: 2 },
+                  ]
+              // Preserve selection limit for checkboxes
+              if (newType === 'checkboxes' && (q as any).selectionLimit) {
+                newQuestion.selectionLimit = (q as any).selectionLimit
+              }
+            }
+            // Add scale config for linear scale
+            if (newType === 'linear_scale') {
+              newQuestion.scaleMin = q.scaleMin || 1
+              newQuestion.scaleMax = q.scaleMax || 5
+              newQuestion.minLabel = q.minLabel || 'Strongly Disagree'
+              newQuestion.maxLabel = q.maxLabel || 'Strongly Agree'
+            }
+            return newQuestion
+          })
+        }
+      })
+    )
   }
 
   function moveQuestionUp(index: number) {
-    if (index === 0) return
-    setCustomQuestions(prev => {
-      const newList = [...prev]
-      ;[newList[index - 1], newList[index]] = [newList[index], newList[index - 1]]
-      return newList
-    })
+    // Not applicable for section-based structure  
   }
 
   function moveQuestionDown(index: number) {
-    if (index === customQuestions.length - 1) return
-    setCustomQuestions(prev => {
-      const newList = [...prev]
-      ;[newList[index], newList[index + 1]] = [newList[index + 1], newList[index]]
-      return newList
+    // Not applicable for section-based structure
+  }
+
+  function addOptionToQuestion(questionId: string, label: string = '') {
+    setCustomSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => {
+          if (q.id !== questionId) return q
+          const newOptions = [...(q.options || [])]
+          const newId = `${questionId}-opt-${newOptions.length}`
+          newOptions.push({
+            id: newId,
+            label: label || `Option ${newOptions.length + 1}`,
+            value_key: (label || `Option ${newOptions.length + 1}`)
+              .toLowerCase()
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '_'),
+            order: newOptions.length,
+          })
+          return { ...q, options: newOptions }
+        })
+      }))
+    )
+  }
+
+  function removeOptionFromQuestion(questionId: string, optionId: string) {
+    setCustomSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => {
+          if (q.id !== questionId) return q
+          return {
+            ...q,
+            options: (q.options || []).filter(o => o.id !== optionId).map((o, idx) => ({ ...o, order: idx + 1 })),
+          }
+        })
+      }))
+    )
+  }
+
+  function updateOption(questionId: string, optionId: string, updates: Partial<QuestionOption>) {
+    setCustomSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => {
+          if (q.id !== questionId) return q
+          return {
+            ...q,
+            options: (q.options || []).map(o =>
+              o.id === optionId ? { ...o, ...updates } : o
+            ),
+          }
+        })
+      }))
+    )
+  }
+
+  function moveOptionUp(questionId: string, optionIndex: number) {
+    if (optionIndex === 0) return
+    setCustomSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => {
+          if (q.id !== questionId) return q
+          const opts = [...(q.options || [])]
+          ;[opts[optionIndex - 1], opts[optionIndex]] = [opts[optionIndex], opts[optionIndex - 1]]
+          return {
+            ...q,
+            options: opts.map((o, idx) => ({ ...o, order: idx + 1 })),
+          }
+        })
+      }))
+    )
+  }
+
+  function moveOptionDown(questionId: string, optionIndex: number) {
+    setCustomSections(prev =>
+      prev.map(s => {
+        const q = (s.questions || []).find(qq => qq.id === questionId)
+        if (!q || !q.options || optionIndex === q.options.length - 1) return s
+        
+        return {
+          ...s,
+          questions: (s.questions || []).map(qq => {
+            if (qq.id !== questionId) return qq
+            const opts = [...(qq.options || [])]
+            ;[opts[optionIndex], opts[optionIndex + 1]] = [opts[optionIndex + 1], opts[optionIndex]]
+            return {
+              ...qq,
+              options: opts.map((o, idx) => ({ ...o, order: idx + 1 })),
+            }
+          })
+        }
+      })
+    )
+  }
+
+  // ── Section Management Functions ───────────────────────────────────────────
+  function addNewSection() {
+    const newSection: SurveyCategory = {
+      id: `sec-${Date.now()}`,
+      name: `Section ${customSections.length + 1}`,
+      description: undefined,
+      order: customSections.length + 1,
+      questions: [],
+      sectionButtons: [],
+      collapsedByDefault: false,
+    }
+    setCustomSections(prev => [...prev, newSection])
+    setExpandedSectionId(newSection.id)
+  }
+
+  function removeSection(id: string) {
+    setCustomSections(prev => prev.filter(s => s.id !== id))
+    if (expandedSectionId === id) setExpandedSectionId(null)
+  }
+
+  function updateSection(id: string, updates: Partial<SurveyCategory>) {
+    setCustomSections(prev =>
+      prev.map(s => (s.id === id ? { ...s, ...updates } : s))
+    )
+  }
+
+  function moveSectionUp(index: number) {
+    if (index === 0) return
+    setCustomSections(prev => {
+      const arr = [...prev]
+      ;[arr[index - 1], arr[index]] = [arr[index], arr[index - 1]]
+      return arr.map((s, idx) => ({ ...s, order: idx + 1 }))
+    })
+  }
+
+  function moveSectionDown(index: number) {
+    if (index === customSections.length - 1) return
+    setCustomSections(prev => {
+      const arr = [...prev]
+      ;[arr[index], arr[index + 1]] = [arr[index + 1], arr[index]]
+      return arr.map((s, idx) => ({ ...s, order: idx + 1 }))
     })
   }
 
   async function handleSaveCustomSurvey() {
-    if (!customSurveyTitle.trim() || customQuestions.length === 0) return
-    
-    // Validate all questions have prompts
-    const invalidQuestions = customQuestions.filter(q => !q.prompt.trim())
-    if (invalidQuestions.length > 0) {
-      setCustomError('All questions must have a prompt text.')
+    // Validation - check for at least one question across all sections
+    const totalQuestions = customSections.reduce((sum, s) => sum + (s.questions?.length || 0), 0)
+    if (!customSurveyTitle.trim() || totalQuestions === 0) {
+      setCustomError('Survey title and at least one question are required.')
+      return
+    }
+
+    const validationErrors = customSections.flatMap(s => 
+      (s.questions || []).flatMap(q => validateQuestion(q))
+    )
+    if (validationErrors.length > 0) {
+      setCustomError(
+        `Validation errors:\n${validationErrors.map((e: any) => `- ${e.message}`).join('\n')}`
+      )
       return
     }
 
@@ -314,59 +533,37 @@ export default function AddOrGenerateSurveyDialog({
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated.')
 
-      // Create snapshot for custom survey
-      const snapshot = {
+      // Build snapshot with section-based structure
+      const categories: SurveyCategory[] = customSections.map((section, idx) => ({
+        ...section,
+        order: idx + 1,
+        questions: section.questions || [],
+      }))
+
+      const snapshot: SurveySnapshot = {
         packName: customSurveyTitle,
         version: `custom-${Date.now()}`,
         ai_generated: false,
         custom_survey: true,
-        categories: [{
-          id: 'custom-category',
-          name: 'Survey Questions',
-          order: 1,
-          questions: customQuestions.map((q, idx) => ({
-            id: q.id,
-            type: q.type, // Keep original type - renderer handles all types
-            prompt: q.prompt,
-            required: q.required,
-            order: idx + 1,
-            ...(q.options ? { options: q.options.map((opt, optIdx) => ({
-              id: `${q.id}-opt-${optIdx}`,
-              label: opt,
-              value_key: opt.toLowerCase().replace(/\s+/g, '_'),
-              order: optIdx + 1
-            })) } : {}),
-            ...(q.type === 'linear_scale' ? {
-              scaleMin: q.scaleMin ?? 1,
-              scaleMax: q.scaleMax ?? 5,
-              minLabel: q.minLabel,
-              maxLabel: q.maxLabel
-            } : {}),
-          }))
-        }]
+        description: customSurveyDescription,
+        categories,
       }
 
-      // Create survey
       const { data: survey, error: surveyErr } = await (supabase as any)
         .from('surveys')
         .insert({
           project_id: projectId,
-          pack_id: null, // Custom survey has no pack_id
+          pack_id: null,
           pack_version_snapshot: snapshot,
           status: 'published',
         })
         .select()
         .single()
-      
+
       if (surveyErr) {
-        console.error('Survey creation error:', surveyErr)
-        // Show detailed error to user
-        throw new Error(`Database error: ${surveyErr?.message || 'Failed to create survey'}\n\nIf you see "null value in column pack_id" or "violates not-null constraint", you need to run the database migration to allow custom surveys.`)
+        throw new Error(`Database error: ${surveyErr?.message || 'Failed to create survey'}`)
       }
       if (!survey) throw new Error('Failed to create survey.')
-
-      console.log('✅ Custom survey created successfully:', survey.id)
-      console.log('Survey data:', survey)
 
       // Create token
       const token = Array.from(globalThis.crypto.getRandomValues(new Uint8Array(24)))
@@ -380,17 +577,11 @@ export default function AddOrGenerateSurveyDialog({
       })
 
       if (tokenErr) {
-        console.error('Token creation error:', tokenErr)
         throw new Error(tokenErr?.message ?? 'Failed to create survey token.')
       }
 
-      console.log('✅ Token created successfully')
-      
       setCustomSuccess(true)
-      
-      // Force page refresh after short delay
       setTimeout(() => {
-        console.log('Refreshing page to show new survey...')
         router.refresh()
         handleClose()
       }, 1500)
@@ -401,7 +592,7 @@ export default function AddOrGenerateSurveyDialog({
     }
   }
 
-  // ── Open/close ────────────────────────────────────────────────────────────────
+  // ── Open/close ─────────────────────────────────────────────────────────────
   function handleOpen() {
     setIsOpen(true)
     setTab('recommend')
@@ -413,12 +604,21 @@ export default function AddOrGenerateSurveyDialog({
     setGenError(null)
     setCopied(false)
     setCustomSurveyTitle('')
-    setCustomQuestions([])
-    setEditingQuestionId(null)
+    setCustomSurveyDescription(undefined)
+    setCustomSections([{
+      id: `sec-${Date.now()}`,
+      name: 'Section 1',
+      description: undefined,
+      order: 1,
+      questions: [],
+      sectionButtons: [],
+      collapsedByDefault: false,
+    }])
+    setExpandedQuestionId(null)
+    setExpandedSectionId(null)
     setCustomSaving(false)
     setCustomError(null)
     setCustomSuccess(false)
-    // Reset recommendations if packs changed
     if (recState === 'idle' || addedPackIds.size > 0) {
       setRecommendations([])
       setRecState('idle')
@@ -430,14 +630,13 @@ export default function AddOrGenerateSurveyDialog({
     if (genStep === 'done') router.refresh()
   }
 
-  // ── Group recommendations ────────────────────────────────────────────────────
-  const recommended   = recommendations.filter(r => r.recommended)
+  // ── Group recommendations ──────────────────────────────────────────────────
+  const recommended = recommendations.filter(r => r.recommended)
   const notRecommended = recommendations.filter(r => !r.recommended)
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Single trigger button */}
       <button
         onClick={handleOpen}
         className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white text-sm font-medium px-5 py-3 rounded-xl transition-all shadow-sm"
@@ -446,11 +645,9 @@ export default function AddOrGenerateSurveyDialog({
         Add or Generate AI Survey
       </button>
 
-      {/* Dialog */}
       {isOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col">
-
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col">
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-start justify-between rounded-t-2xl z-10">
               <div>
@@ -465,486 +662,106 @@ export default function AddOrGenerateSurveyDialog({
                   Project: <span className="font-medium text-gray-700">{projectName}</span>
                 </p>
               </div>
-              <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none mt-0.5">×</button>
+              <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none mt-0.5">
+                ×
+              </button>
             </div>
 
             {/* Tabs */}
             <div className="flex border-b border-gray-100 px-6">
-              <button
-                onClick={() => setTab('recommend')}
-                className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
-                  tab === 'recommend'
-                    ? 'border-violet-600 text-violet-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                AI Recommendations
-              </button>
-              <button
-                onClick={() => setTab('generate')}
-                className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
-                  tab === 'generate'
-                    ? 'border-violet-600 text-violet-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Generate New Survey
-              </button>
-              <button
-                onClick={() => setTab('custom')}
-                className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
-                  tab === 'custom'
-                    ? 'border-violet-600 text-violet-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Create Custom
-              </button>
+              {(['recommend', 'generate', 'custom'] as const).map(tabName => (
+                <button
+                  key={tabName}
+                  onClick={() => setTab(tabName)}
+                  className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                    tab === tabName
+                      ? 'border-violet-600 text-violet-700'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {{
+                    recommend: 'AI Recommendations',
+                    generate: 'Generate New Survey',
+                    custom: 'Create Custom',
+                  }[tabName]}
+                </button>
+              ))}
             </div>
 
-            <div className="px-6 py-6 space-y-5 flex-1">
-
+            <div className="px-6 py-6 space-y-5 flex-1 overflow-y-auto">
               {/* ══════════ TAB: AI Recommendations ══════════ */}
               {tab === 'recommend' && (
-                <>
-                  {availablePacks.length === 0 && (
-                    <div className="text-center py-10 text-gray-400">
-                      <p className="text-base mb-1">All available frameworks are already added.</p>
-                      <p className="text-xs">Switch to the "Generate New Survey" tab to create a custom one.</p>
-                    </div>
-                  )}
-
-                  {/* Loading */}
-                  {recState === 'loading' && availablePacks.length > 0 && (
-                    <div className="py-10 flex flex-col items-center gap-3 text-gray-500">
-                      <span className="animate-spin w-8 h-8 border-4 border-violet-300 border-t-violet-600 rounded-full inline-block" />
-                      <p className="text-sm">Groq is analyzing your project and finding applicable frameworks…</p>
-                    </div>
-                  )}
-
-                  {/* Error */}
-                  {recState === 'error' && (
-                    <div className="space-y-3">
-                      <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-                        {recError}
-                      </div>
-                      <button
-                        onClick={fetchRecommendations}
-                        className="text-sm text-violet-600 hover:underline"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Results */}
-                  {recState === 'done' && availablePacks.length > 0 && (
-                    <>
-                      {addError && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-                          {addError}
-                        </div>
-                      )}
-
-                      {/* Recommended packs */}
-                      {recommended.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                            Applicable to this project
-                          </p>
-                          <div className="space-y-3">
-                            {recommended.map(rec => {
-                              const pack = packs.find(p => p.id === rec.packId)
-                              const isAdded = addedPackIds.has(rec.packId)
-                              const isAdding = addingPackId === rec.packId
-                              if (!pack || isAdded) return null
-                              return (
-                                <div
-                                  key={rec.packId}
-                                  className="border border-violet-200 bg-violet-50 rounded-xl p-4"
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                                        <span className="text-sm font-semibold text-gray-900">{rec.packName}</span>
-                                        <span className="text-xs font-mono text-violet-500 bg-white px-1.5 py-0.5 rounded border border-violet-200">
-                                          v{pack.version}
-                                        </span>
-                                        <span className="text-xs font-medium text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
-                                          Recommended
-                                        </span>
-                                      </div>
-                                      <p className="text-xs text-violet-800 leading-relaxed">{rec.reason}</p>
-                                    </div>
-                                    <button
-                                      onClick={() => handleAddPack(rec.packId)}
-                                      disabled={!!addingPackId}
-                                      className="shrink-0 text-xs font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
-                                    >
-                                      {isAdding ? 'Adding…' : 'Add Framework'}
-                                    </button>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Not applicable packs */}
-                      {notRecommended.length > 0 && notRecommended.some(r => !addedPackIds.has(r.packId) && packs.find(p => p.id === r.packId)) && (
-                        <div>
-                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 mt-2">
-                            Not applicable to this project
-                          </p>
-                          <div className="space-y-2">
-                            {notRecommended.map(rec => {
-                              const pack = packs.find(p => p.id === rec.packId)
-                              const isAdded = addedPackIds.has(rec.packId)
-                              const isAdding = addingPackId === rec.packId
-                              if (!pack || isAdded) return null
-                              return (
-                                <div key={rec.packId} className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                                        <span className="text-sm font-medium text-gray-700">{rec.packName}</span>
-                                        <span className="text-xs font-mono text-gray-400 bg-white px-1.5 py-0.5 rounded border border-gray-200">
-                                          v{pack.version}
-                                        </span>
-                                      </div>
-                                      <p className="text-xs text-gray-500 leading-relaxed">{rec.reason}</p>
-                                    </div>
-                                    <button
-                                      onClick={() => handleAddPack(rec.packId)}
-                                      disabled={!!addingPackId}
-                                      className="shrink-0 text-xs font-medium text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-100 border border-gray-200 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
-                                    >
-                                      {isAdding ? 'Adding…' : 'Add Anyway'}
-                                    </button>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Re-analyze button */}
-                      <div className="pt-2 border-t border-gray-100 flex justify-end">
-                        <button
-                          onClick={() => { setRecState('idle'); setRecommendations([]); }}
-                          className="text-xs text-violet-500 hover:text-violet-700 hover:underline"
-                        >
-                          Re-analyze frameworks
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </>
+                <RecommendationsTab
+                  availablePacks={availablePacks}
+                  packs={packs}
+                  recState={recState}
+                  recommendations={recommendations}
+                  recommended={recommended}
+                  notRecommended={notRecommended}
+                  recError={recError}
+                  addError={addError}
+                  addingPackId={addingPackId}
+                  addedPackIds={addedPackIds}
+                  onAddPack={handleAddPack}
+                  onFetchRecommendations={fetchRecommendations}
+                  onResetRecommendations={() => setRecommendations([])}
+                />
               )}
 
               {/* ══════════ TAB: Generate New AI Survey ══════════ */}
               {tab === 'generate' && (
-                <>
-                  {(genStep === 'form' || genStep === 'generating') && (
-                    <>
-                      {/* Tips panel */}
-                      <div className="border border-amber-200 rounded-xl overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() => setShowTips(v => !v)}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 text-sm font-medium text-amber-800 hover:bg-amber-100 transition-colors"
-                        >
-                          <span className="flex items-center gap-2">💡 Prompting Tips for Better Surveys</span>
-                          <span className="text-amber-600 text-xs">{showTips ? '▲ Hide' : '▼ Show'}</span>
-                        </button>
-                        {showTips && (
-                          <div className="px-4 py-4 bg-white text-xs text-gray-600 space-y-3 border-t border-amber-100">
-                            <div>
-                              <p className="font-semibold text-gray-800 mb-0.5">1. Persona</p>
-                              <p>Tell the AI who it is — e.g. <em>"Act as a Senior UX Researcher"</em> or <em>"Market Analyst"</em>.</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-800 mb-0.5">2. Length / Completion Time</p>
-                              <p>Specify how long the survey should take — e.g. <em>"3 minutes max"</em> or a target number of questions.</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-800 mb-0.5">3. Question Types</p>
-                              <p>Define the mix — e.g. <em>"70% Likert scale, 20% Multiple choice, 10% Open-ended"</em>.</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-800 mb-0.5">4. Tone / Style</p>
-                              <p>Specify if you want formal, conversational, or friendly phrasing.</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-800 mb-0.5">5. Constraints</p>
-                              <p>Mention what to avoid — e.g. <em>"Avoid leading questions,"</em> <em>"No jargon,"</em> or <em>"Don't ask for PII/personal data"</em>.</p>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-800 mb-0.5">6. Logical Flow</p>
-                              <p>Specify skip logic if needed — e.g. <em>"If they answer No to Q2, skip to Q5"</em>.</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Single description input */}
-                      <div>
-                        <label htmlFor="survey-description" className="block text-sm font-semibold text-gray-800 mb-1.5">
-                          Survey Description <span className="text-red-400">*</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mb-2">
-                          Describe your project, target respondents, purpose, preferred question types, tone, and any special instructions — all in one place.
-                        </p>
-                        <textarea
-                          id="survey-description"
-                          name="surveyDescription"
-                          rows={8}
-                          value={surveyDescription}
-                          onChange={e => setSurveyDescription(e.target.value)}
-                          disabled={genStep === 'generating'}
-                          placeholder={`e.g. Act as a Senior UX Researcher. Create a 3-minute customer satisfaction survey for a mobile banking app targeting adults aged 18–35 in Southeast Asia. Use 60% Likert scale and 40% multiple choice questions. Keep the tone friendly and conversational. Avoid jargon and don't ask for personal data. Goal: understand pain points with existing banking apps.`}
-                          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none disabled:bg-gray-50 disabled:text-gray-400"
-                        />
-                        <p className="text-xs text-gray-400 mt-1 text-right">{surveyDescription.length} chars</p>
-                      </div>
-
-                      <div className="flex gap-3 pt-2">
-                        <button
-                          onClick={handleClose}
-                          disabled={genStep === 'generating'}
-                          className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleGenerate}
-                          disabled={!isGenFormValid || genStep === 'generating'}
-                          className="flex-1 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-40 transition-all flex items-center justify-center gap-2"
-                        >
-                          {genStep === 'generating' ? (
-                            <>
-                              <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block" />
-                              Generating Survey…
-                            </>
-                          ) : (
-                            <><span>✨</span> Generate Survey</>
-                          )}
-                        </button>
-                      </div>
-
-                      {genStep === 'generating' && (
-                        <p className="text-center text-sm text-gray-500 animate-pulse">
-                          AI is crafting your survey — this usually takes 5–15 seconds…
-                        </p>
-                      )}
-                    </>
-                  )}
-
-                  {/* Done */}
-                  {genStep === 'done' && genResult && (
-                    <div className="space-y-5">
-                      <div className="text-center py-2">
-                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                          <span className="text-3xl">🎉</span>
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-1">Survey Created!</h3>
-                        <p className="text-sm text-gray-500">Your AI-generated survey is live and publicly accessible.</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-                        <p className="text-sm font-semibold text-gray-800">{genResult.surveyTitle}</p>
-                        <div className="flex gap-4 text-xs text-gray-500">
-                          <span>📂 {genResult.categoryCount} categories</span>
-                          <span>❓ {genResult.questionCount} questions</span>
-                          <span className="text-green-600 font-medium">✓ Published</span>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Public Shareable Link</label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            readOnly
-                            value={`${typeof window !== 'undefined' ? window.location.origin : ''}${genResult.shareLink}`}
-                            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-gray-50 focus:outline-none"
-                            onClick={e => (e.target as HTMLInputElement).select()}
-                          />
-                          <button
-                            onClick={handleCopyLink}
-                            className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                              copied
-                                ? 'bg-green-100 text-green-700 border border-green-200'
-                                : 'bg-violet-600 hover:bg-violet-700 text-white'
-                            }`}
-                          >
-                            {copied ? '✓ Copied!' : 'Copy'}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex gap-3 pt-1">
-                        <button onClick={handleClose} className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
-                          Close
-                        </button>
-                        <a
-                          href={genResult.shareLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors text-center"
-                        >
-                          Preview Survey →
-                        </a>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Error */}
-                  {genStep === 'error' && (
-                    <div className="space-y-4">
-                      <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
-                        <p className="font-medium mb-1">Generation Failed</p>
-                        <p>{genError}</p>
-                      </div>
-                      <div className="flex gap-3">
-                        <button onClick={handleClose} className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
-                        <button onClick={() => setGenStep('form')} className="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors">Try Again</button>
-                      </div>
-                    </div>
-                  )}
-                </>
+                <GenerateTab
+                  genStep={genStep}
+                  surveyDescription={surveyDescription}
+                  showTips={showTips}
+                  isGenFormValid={isGenFormValid}
+                  genResult={genResult}
+                  genError={genError}
+                  copied={copied}
+                  onSurveyDescriptionChange={setSurveyDescription}
+                  onShowTipsToggle={() => setShowTips(v => !v)}
+                  onGenerate={handleGenerate}
+                  onClose={handleClose}
+                  onCopyLink={handleCopyLink}
+                />
               )}
 
               {/* ══════════ TAB: Create Custom Survey ══════════ */}
               {tab === 'custom' && (
-                <>
-                  {!customSuccess ? (
-                    <>
-                      {/* Survey Title */}
-                      <div>
-                        <label htmlFor="custom-survey-title" className="block text-sm font-semibold text-gray-800 mb-2">
-                          Survey Title <span className="text-red-400">*</span>
-                        </label>
-                        <input
-                          id="custom-survey-title"
-                          name="customSurveyTitle"
-                          type="text"
-                          value={customSurveyTitle}
-                          onChange={e => setCustomSurveyTitle(e.target.value)}
-                          placeholder="e.g., Customer Satisfaction Survey"
-                          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                        />
-                      </div>
-
-                      {/* Questions List */}
-                      {customQuestions.length > 0 && (
-                        <div className="space-y-3">
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                            Questions ({customQuestions.length})
-                          </p>
-                          {customQuestions.map((question, index) => (
-                            <QuestionEditor
-                              key={question.id}
-                              question={question}
-                              index={index}
-                              isEditing={editingQuestionId === question.id}
-                              onEdit={() => setEditingQuestionId(question.id)}
-                              onUpdate={(updates) => updateCustomQuestion(question.id, updates)}
-                              onRemove={() => removeCustomQuestion(question.id)}
-                              onMoveUp={() => moveQuestionUp(index)}
-                              onMoveDown={() => moveQuestionDown(index)}
-                              canMoveUp={index > 0}
-                              canMoveDown={index < customQuestions.length - 1}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Add Question Buttons */}
-                      <div className="border-t border-gray-100 pt-4">
-                        <p className="text-xs font-semibold text-gray-600 mb-3">Add Question Type:</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button onClick={() => addCustomQuestion('short_text')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            📝 Short Text
-                          </button>
-                          <button onClick={() => addCustomQuestion('long_text')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            📄 Long Text
-                          </button>
-                          <button onClick={() => addCustomQuestion('multiple_choice')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            ⭕ Multiple Choice
-                          </button>
-                          <button onClick={() => addCustomQuestion('checkboxes')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            ☑️ Checkboxes
-                          </button>
-                          <button onClick={() => addCustomQuestion('dropdown')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            🔽 Dropdown
-                          </button>
-                          <button onClick={() => addCustomQuestion('linear_scale')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            📊 Linear Scale
-                          </button>
-                          <button onClick={() => addCustomQuestion('yes_no')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            ✓✗ Yes/No
-                          </button>
-                          <button onClick={() => addCustomQuestion('email')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            ✉️ Email
-                          </button>
-                          <button onClick={() => addCustomQuestion('url')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            🔗 URL
-                          </button>
-                          <button onClick={() => addCustomQuestion('date')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            📅 Date
-                          </button>
-                          <button onClick={() => addCustomQuestion('time')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            🕐 Time
-                          </button>
-                          <button onClick={() => addCustomQuestion('number')} className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            🔢 Number
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Error Display */}
-                      {customError && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-                          {customError}
-                        </div>
-                      )}
-
-                      {/* Action Buttons */}
-                      <div className="flex gap-3 pt-2 border-t border-gray-100">
-                        <button
-                          onClick={handleClose}
-                          disabled={customSaving}
-                          className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSaveCustomSurvey}
-                          disabled={!customSurveyTitle.trim() || customQuestions.length === 0 || customSaving}
-                          className="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-40 transition-all flex items-center justify-center gap-2"
-                        >
-                          {customSaving ? (
-                            <>
-                              <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block" />
-                              Creating Survey…
-                            </>
-                          ) : (
-                            <>💾 Create Survey ({customQuestions.length} questions)</>
-                          )}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <span className="text-3xl">✓</span>
-                      </div>
-                      <h3 className="text-xl font-bold text-gray-900 mb-1">Survey Created!</h3>
-                      <p className="text-sm text-gray-500">Your custom survey has been created successfully.</p>
-                    </div>
-                  )}
-                </>
+                <CustomSurveyTab
+                  customSurveyTitle={customSurveyTitle}
+                  customSurveyDescription={customSurveyDescription}
+                  customSections={customSections}
+                  expandedQuestionId={expandedQuestionId}
+                  expandedSectionId={expandedSectionId}
+                  customError={customError}
+                  customSaving={customSaving}
+                  customSuccess={customSuccess}
+                  onTitleChange={setCustomSurveyTitle}
+                  onDescriptionChange={setCustomSurveyDescription}
+                  onAddQuestion={addNewQuestion}
+                  onRemoveQuestion={removeQuestion}
+                  onDuplicateQuestion={duplicateQuestion}
+                  onMoveUp={moveQuestionUp}
+                  onMoveDown={moveQuestionDown}
+                  onUpdateQuestion={updateQuestion}
+                  onExpandQuestion={(id: string | null) => setExpandedQuestionId(id === expandedQuestionId ? null : id)}
+                  onChangeQuestionType={changeQuestionType}
+                  onAddOption={addOptionToQuestion}
+                  onRemoveOption={removeOptionFromQuestion}
+                  onUpdateOption={updateOption}
+                  onMoveOptionUp={moveOptionUp}
+                  onMoveOptionDown={moveOptionDown}
+                  onAddSection={addNewSection}
+                  onRemoveSection={removeSection}
+                  onUpdateSection={updateSection}
+                  onMoveSectionUp={moveSectionUp}
+                  onMoveSectionDown={moveSectionDown}
+                  onExpandSection={(id: string) => setExpandedSectionId(id === expandedSectionId ? null : id)}
+                  onSave={handleSaveCustomSurvey}
+                  onClose={handleClose}
+                />
               )}
-
             </div>
           </div>
         </div>
@@ -953,33 +770,724 @@ export default function AddOrGenerateSurveyDialog({
   )
 }
 
-// ── Question Editor Component ──────────────────────────────────────────────────
-interface QuestionEditorProps {
-  question: CustomQuestion
-  index: number
-  isEditing: boolean
-  onEdit: () => void
-  onUpdate: (updates: Partial<CustomQuestion>) => void
-  onRemove: () => void
-  onMoveUp: () => void
-  onMoveDown: () => void
-  canMoveUp: boolean
-  canMoveDown: boolean
+// ── Recommendations Tab Component ────────────────────────────────────────────
+
+interface RecommendationsTabProps {
+  availablePacks: Pack[]
+  packs: Pack[]
+  recState: RecommendState
+  recommendations: Recommendation[]
+  recommended: Recommendation[]
+  notRecommended: Recommendation[]
+  recError: string | null
+  addError: string | null
+  addingPackId: string | null
+  addedPackIds: Set<string>
+  onAddPack: (packId: string) => Promise<void>
+  onFetchRecommendations: () => Promise<void>
+  onResetRecommendations: () => void
 }
 
-function QuestionEditor({
-  question,
-  index,
-  isEditing,
-  onEdit,
-  onUpdate,
-  onRemove,
+function RecommendationsTab({
+  availablePacks,
+  packs,
+  recState,
+  recommendations,
+  recommended,
+  notRecommended,
+  recError,
+  addError,
+  addingPackId,
+  addedPackIds,
+  onAddPack,
+  onFetchRecommendations,
+  onResetRecommendations,
+}: RecommendationsTabProps) {
+  return (
+    <>
+      {availablePacks.length === 0 && (
+        <div className="text-center py-10 text-gray-400">
+          <p className="text-base mb-1">All available frameworks are already added.</p>
+          <p className="text-xs">Switch to "Generate New Survey" to create a custom one.</p>
+        </div>
+      )}
+
+      {recState === 'loading' && availablePacks.length > 0 && (
+        <div className="py-10 flex flex-col items-center gap-3 text-gray-500">
+          <span className="animate-spin w-8 h-8 border-4 border-violet-300 border-t-violet-600 rounded-full inline-block" />
+          <p className="text-sm">Groq is analyzing your project and finding applicable frameworks…</p>
+        </div>
+      )}
+
+      {recState === 'error' && (
+        <div className="space-y-3">
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+            {recError}
+          </div>
+          <button
+            onClick={onFetchRecommendations}
+            className="text-sm text-violet-600 hover:underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {recState === 'done' && availablePacks.length > 0 && (
+        <>
+          {addError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+              {addError}
+            </div>
+          )}
+
+          {recommended.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                Applicable to this project
+              </p>
+              <div className="space-y-3">
+                {recommended.map(rec => {
+                  const pack = packs.find(p => p.id === rec.packId)
+                  const isAdded = addedPackIds.has(rec.packId)
+                  const isAdding = addingPackId === rec.packId
+                  if (!pack || isAdded) return null
+                  return (
+                    <div
+                      key={rec.packId}
+                      className="border border-violet-200 bg-violet-50 rounded-xl p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-sm font-semibold text-gray-900">
+                              {rec.packName}
+                            </span>
+                            <span className="text-xs font-mono text-violet-500 bg-white px-1.5 py-0.5 rounded border border-violet-200">
+                              v{pack.version}
+                            </span>
+                            <span className="text-xs font-medium text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
+                              Recommended
+                            </span>
+                          </div>
+                          <p className="text-xs text-violet-800 leading-relaxed">
+                            {rec.reason}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => onAddPack(rec.packId)}
+                          disabled={!!addingPackId}
+                          className="shrink-0 text-xs font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+                        >
+                          {isAdding ? 'Adding…' : 'Add Framework'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {notRecommended.length > 0 &&
+            notRecommended.some(
+              r =>
+                !addedPackIds.has(r.packId) &&
+                packs.find(p => p.id === r.packId)
+            ) && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 mt-2">
+                  Not applicable to this project
+                </p>
+                <div className="space-y-2">
+                  {notRecommended.map(rec => {
+                    const pack = packs.find(p => p.id === rec.packId)
+                    const isAdded = addedPackIds.has(rec.packId)
+                    const isAdding = addingPackId === rec.packId
+                    if (!pack || isAdded) return null
+                    return (
+                      <div
+                        key={rec.packId}
+                        className="border border-gray-200 rounded-xl p-4 bg-gray-50/50"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="text-sm font-medium text-gray-700">
+                                {rec.packName}
+                              </span>
+                              <span className="text-xs font-mono text-gray-400 bg-white px-1.5 py-0.5 rounded border border-gray-200">
+                                v{pack.version}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 leading-relaxed">
+                              {rec.reason}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => onAddPack(rec.packId)}
+                            disabled={!!addingPackId}
+                            className="shrink-0 text-xs font-medium text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-100 border border-gray-200 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+                          >
+                            {isAdding ? 'Adding…' : 'Add Anyway'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+          <div className="pt-2 border-t border-gray-100 flex justify-end">
+            <button
+              onClick={onResetRecommendations}
+              className="text-xs text-violet-500 hover:text-violet-700 hover:underline"
+            >
+              Re-analyze frameworks
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+// ── Generate Tab Component ───────────────────────────────────────────────────
+
+interface GenerateTabProps {
+  genStep: GenerateStep
+  surveyDescription: string
+  showTips: boolean
+  isGenFormValid: boolean
+  genResult: GenerateResult | null
+  genError: string | null
+  copied: boolean
+  onSurveyDescriptionChange: (value: string) => void
+  onShowTipsToggle: () => void
+  onGenerate: () => Promise<void>
+  onClose: () => void
+  onCopyLink: () => Promise<void>
+}
+
+function GenerateTab({
+  genStep,
+  surveyDescription,
+  showTips,
+  isGenFormValid,
+  genResult,
+  genError,
+  copied,
+  onSurveyDescriptionChange,
+  onShowTipsToggle,
+  onGenerate,
+  onClose,
+  onCopyLink,
+}: GenerateTabProps) {
+  if (genStep === 'done' && genResult) {
+    return (
+      <div className="space-y-5">
+        <div className="text-center py-2">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="text-3xl">🎉</span>
+          </div>
+          <h3 className="text-xl font-bold text-gray-900 mb-1">AI Survey Generated!</h3>
+          <p className="text-sm text-gray-500">Your survey is organized into sections, uses diverse question types, and is ready for respondents.</p>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">{genResult.surveyTitle}</p>
+            <p className="text-xs text-gray-500 mt-1">All features available: rich text formatting, section descriptions, selection limits for checkboxes, skip logic, and more.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center text-xs">
+            <div className="bg-white rounded p-2 border border-blue-100">
+              <div className="font-semibold text-blue-700">{genResult.categoryCount}</div>
+              <div className="text-gray-500">Sections</div>
+            </div>
+            <div className="bg-white rounded p-2 border border-blue-100">
+              <div className="font-semibold text-blue-700">{genResult.questionCount}</div>
+              <div className="text-gray-500">Questions</div>
+            </div>
+            <div className="bg-white rounded p-2 border border-blue-100">
+              <div className="font-semibold text-green-700">✓</div>
+              <div className="text-gray-500">Published</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+            Public Shareable Link
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={`${typeof window !== 'undefined' ? window.location.origin : ''}${genResult.shareLink}`}
+              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-gray-50 focus:outline-none"
+              onClick={e => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              onClick={onCopyLink}
+              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                copied
+                  ? 'bg-green-100 text-green-700 border border-green-200'
+                  : 'bg-violet-600 hover:bg-violet-700 text-white'
+              }`}
+            >
+              {copied ? '✓ Copied!' : 'Copy'}
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-3 pt-1">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            Done
+          </button>
+          <a
+            href={genResult.shareLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 rounded-xl transition-colors text-center flex items-center justify-center gap-2"
+          >
+            <span>📤</span> Share
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  if (genStep === 'error') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          <p className="font-medium mb-1">Generation Failed</p>
+          <p>{genError}</p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="border border-amber-200 rounded-xl overflow-hidden">
+        <button
+          type="button"
+          onClick={onShowTipsToggle}
+          className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 text-sm font-medium text-amber-800 hover:bg-amber-100 transition-colors"
+        >
+          <span className="flex items-center gap-2">💡 Prompting Tips for Better Surveys</span>
+          <span className="text-amber-600 text-xs">{showTips ? '▲ Hide' : '▼ Show'}</span>
+        </button>
+        {showTips && (
+          <div className="px-4 py-4 bg-white text-xs text-gray-600 space-y-3 border-t border-amber-100">
+            <div>
+              <p className="font-semibold text-gray-800 mb-0.5">1. Sections (Categories)</p>
+              <p>
+                Ask for <em>"2-5 thematic sections"</em> to organize questions logically (like Google Forms) — e.g. <em>"Divide into: Product Experience, Feature Usage, and Feedback."</em>
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800 mb-0.5">2. Question Diversity</p>
+              <p>
+                Specify the mix — e.g. <em>"60% rating scales, 25% multiple choice, 15% open-ended"</em> — to create engaging, multi-format surveys.
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800 mb-0.5">3. Target Audience & Context</p>
+              <p>
+                Describe who'll respond — e.g. <em>"Tech-savvy professionals aged 25–45"</em> — so questions are relevant and appropriately phrased.
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800 mb-0.5">4. Duration & Length</p>
+              <p>
+                Specify completion time — e.g. <em>"3–5 minutes max"</em> — and mention preference for brevity or depth.
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-800 mb-0.5">5. Tone & Constraints</p>
+              <p>
+                Define style and guardrails — e.g. <em>"Friendly, conversational, avoid jargon, no personal data."</em>
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="survey-description" className="block text-sm font-semibold text-gray-800 mb-1.5">
+          Survey Description <span className="text-red-400">*</span>
+        </label>
+        <p className="text-xs text-gray-500 mb-2">
+          Describe your project, target audience, desired sections, preferred question types, tone, and goals. The AI will create a Google Forms-style survey with organized sections and diverse question types.
+        </p>
+        <textarea
+          id="survey-description"
+          name="surveyDescription"
+          rows={8}
+          value={surveyDescription}
+          onChange={e => onSurveyDescriptionChange(e.target.value)}
+          disabled={genStep === 'generating'}
+          placeholder={`e.g. Create a customer experience survey for a mobile banking app targeting 18-35 year old professionals. Organize into 3 sections: App Usability, Feature Preferences, and Overall Satisfaction. Use 50% rating scales, 35% multiple choice, and 15% open-ended questions. Keep it conversational, 4-5 minutes max, and avoid asking for personal information. Goal: identify the top 3 pain points and feature requests.`}
+          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none disabled:bg-gray-50 disabled:text-gray-400"
+        />
+        <p className="text-xs text-gray-400 mt-1 text-right">{surveyDescription.length} chars</p>
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <button
+          onClick={onClose}
+          disabled={genStep === 'generating'}
+          className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onGenerate}
+          disabled={!isGenFormValid || genStep === 'generating'}
+          className="flex-1 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+        >
+          {genStep === 'generating' ? (
+            <>
+              <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block" />
+              Generating Survey…
+            </>
+          ) : (
+            <>
+              <span>✨</span> Generate Survey
+            </>
+          )}
+        </button>
+      </div>
+
+      {genStep === 'generating' && (
+        <p className="text-center text-sm text-gray-500 animate-pulse">
+          AI is crafting your survey — this usually takes 5–15 seconds…
+        </p>
+      )}
+    </>
+  )
+}
+
+// ── Custom Survey Tab Component ────────────────────────────────────────────
+
+interface CustomSurveyTabProps {
+  customSurveyTitle: string
+  customSurveyDescription: RichTextContent | undefined
+  customSections: SurveyCategory[]
+  expandedQuestionId: string | null
+  expandedSectionId: string | null
+  customError: string | null
+  customSaving: boolean
+  customSuccess: boolean
+  onTitleChange: (value: string) => void
+  onDescriptionChange: (value: RichTextContent) => void
+  onAddQuestion: (type: QuestionType) => void
+  onRemoveQuestion: (id: string) => void
+  onDuplicateQuestion: (id: string) => void
+  onMoveUp: (index: number) => void
+  onMoveDown: (index: number) => void
+  onUpdateQuestion: (id: string, updates: Partial<Question>) => void
+  onExpandQuestion: (id: string | null) => void
+  onChangeQuestionType: (sectionId: string, questionId: string, newType: string) => void
+  onAddOption: (questionId: string, label?: string) => void
+  onRemoveOption: (questionId: string, optionId: string) => void
+  onUpdateOption: (questionId: string, optionId: string, updates: Partial<QuestionOption>) => void
+  onMoveOptionUp: (questionId: string, optionIndex: number) => void
+  onMoveOptionDown: (questionId: string, optionIndex: number) => void
+  onAddSection: () => void
+  onRemoveSection: (id: string) => void
+  onUpdateSection: (id: string, updates: Partial<SurveyCategory>) => void
+  onMoveSectionUp: (index: number) => void
+  onMoveSectionDown: (index: number) => void
+  onExpandSection: (id: string) => void
+  onSave: () => Promise<void>
+  onClose: () => void
+}
+
+function CustomSurveyTab({
+  customSurveyTitle,
+  customSurveyDescription,
+  customSections,
+  expandedQuestionId,
+  expandedSectionId,
+  customError,
+  customSaving,
+  customSuccess,
+  onTitleChange,
+  onDescriptionChange,
+  onAddQuestion,
+  onRemoveQuestion,
+  onDuplicateQuestion,
   onMoveUp,
   onMoveDown,
-  canMoveUp,
-  canMoveDown,
-}: QuestionEditorProps) {
-  const questionTypeLabels: Record<QuestionType, string> = {
+  onUpdateQuestion,
+  onExpandQuestion,
+  onChangeQuestionType,
+  onAddOption,
+  onRemoveOption,
+  onUpdateOption,
+  onMoveOptionUp,
+  onMoveOptionDown,
+  onAddSection,
+  onRemoveSection,
+  onUpdateSection,
+  onMoveSectionUp,
+  onMoveSectionDown,
+  onExpandSection,
+  onSave,
+  onClose,
+}: CustomSurveyTabProps) {
+  // Render rich text with formatting
+  const renderRichText = (content: string | RichTextContent | undefined) => {
+    if (!content) return null
+    
+    const text = typeof content === 'string' ? content : content?.text || ''
+    const marks = typeof content === 'object' && content.marks ? content.marks : []
+    
+    if (!marks || marks.length === 0) {
+      return text
+    }
+
+    // Sort marks by start position
+    const sortedMarks = [...marks].sort((a, b) => a.start - b.start)
+    const segments: Array<{ text: string; marks: any[] }> = []
+    let lastEnd = 0
+
+    sortedMarks.forEach(mark => {
+      if (mark.start > lastEnd) {
+        segments.push({ text: text.substring(lastEnd, mark.start), marks: [] })
+      }
+
+      const markText = text.substring(mark.start, mark.end)
+      const existingSegment = segments.find(s => s.text === markText && s.marks.some(m => m.type === mark.type))
+      if (!existingSegment) {
+        segments.push({ text: markText, marks: [mark] })
+      }
+      lastEnd = mark.end
+    })
+
+    if (lastEnd < text.length) {
+      segments.push({ text: text.substring(lastEnd), marks: [] })
+    }
+
+    return (
+      <span>
+        {segments.map((seg, idx) => {
+          let element: React.ReactNode = seg.text
+          
+          seg.marks.forEach(mark => {
+            if (mark.type === 'bold') {
+              element = <strong key={`${idx}-bold`}>{element}</strong>
+            } else if (mark.type === 'italic') {
+              element = <em key={`${idx}-italic`}>{element}</em>
+            } else if (mark.type === 'underline') {
+              element = <u key={`${idx}-underline`}>{element}</u>
+            } else if (mark.type === 'strikethrough') {
+              element = <s key={`${idx}-strikethrough`}>{element}</s>
+            } else if (mark.type === 'link' && mark.url) {
+              element = <a key={`${idx}-link`} href={mark.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{element}</a>
+            }
+          })
+          
+          return <span key={idx}>{element}</span>
+        })}
+      </span>
+    )
+  }
+
+  if (customSuccess) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <span className="text-3xl">✓</span>
+        </div>
+        <h3 className="text-xl font-bold text-gray-900 mb-1">Survey Created!</h3>
+        <p className="text-sm text-gray-500">Your custom survey has been created successfully.</p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div>
+        <label htmlFor="custom-survey-title" className="block text-sm font-semibold text-gray-800 mb-2">
+          Survey Title <span className="text-red-400">*</span>
+        </label>
+        <input
+          id="custom-survey-title"
+          name="customSurveyTitle"
+          type="text"
+          value={customSurveyTitle}
+          onChange={e => onTitleChange(e.target.value)}
+          placeholder="e.g., Customer Satisfaction Survey"
+          className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+        />
+      </div>
+
+      {/* Survey Description - Rich Text */}
+      <div>
+        <label htmlFor="custom-survey-description" className="block text-sm font-semibold text-gray-800 mb-2">
+          Form Description <span className="text-gray-400">(Optional)</span>
+        </label>
+        <RichTextEditor
+          id="custom-survey-description"
+          name="customSurveyDescription"
+          value={customSurveyDescription}
+          onChange={onDescriptionChange}
+          placeholder="Add context, instructions, or help text for respondents..."
+          rows={3}
+        />
+      </div>
+
+      {/* Sections Management */}
+      {customSections.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Sections ({customSections.length})
+          </p>
+          {customSections.map((section, index) => (
+            <SectionEditor
+              key={section.id}
+              section={{
+                ...section,
+                order: index + 1,
+              }}
+              allSections={customSections}
+              isExpanded={expandedSectionId === section.id}
+              onExpand={() => onExpandSection(section.id)}
+              onUpdate={(updates) => onUpdateSection(section.id, updates)}
+              onRemove={() => onRemoveSection(section.id)}
+              onMoveUp={() => onMoveSectionUp(index)}
+              onMoveDown={() => onMoveSectionDown(index)}
+              canMoveUp={index > 0}
+              canMoveDown={index < customSections.length - 1}
+              onAddQuestion={(sectionId, type) => onAddQuestion(type as QuestionType)}
+              onRemoveQuestion={(sectionId, qId) => onRemoveQuestion(qId)}
+              onUpdateQuestion={(sectionId, qId, updates) => onUpdateQuestion(qId, updates)}
+              onAddOption={onAddOption}
+              onRemoveOption={onRemoveOption}
+              onUpdateOption={onUpdateOption}
+              onMoveOptionUp={onMoveOptionUp}
+              onMoveOptionDown={onMoveOptionDown}
+              expandedQuestionId={expandedQuestionId}
+              onExpandQuestion={onExpandQuestion}
+              onChangeQuestionType={onChangeQuestionType}
+            />
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={onAddSection}
+        className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 mb-4"
+      >
+        + Add Section
+      </button>
+
+      {/* Live Preview */}
+      {(customSurveyTitle || customSurveyDescription) && (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
+          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Preview</p>
+          {customSurveyTitle && (
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{customSurveyTitle}</p>
+            </div>
+          )}
+          {customSurveyDescription && (
+            <div className="text-xs text-gray-700 whitespace-pre-wrap">
+              {typeof customSurveyDescription === 'string'
+                ? customSurveyDescription
+                : renderRichText(customSurveyDescription)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {customError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 whitespace-pre-wrap">
+          {customError}
+        </div>
+      )}
+
+      <div className="flex gap-3 pt-2 border-t border-gray-100">
+        <button
+          onClick={onClose}
+          disabled={customSaving}
+          className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSave}
+          disabled={!customSurveyTitle.trim() || (customSections.reduce((sum, s) => sum + (s.questions?.length || 0), 0) === 0) || customSaving}
+          className="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+        >
+          {customSaving ? (
+            <>
+              <span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block" />
+              Creating…
+            </>
+          ) : (
+            <>💾 Create ({customSections.reduce((sum, s) => sum + (s.questions?.length || 0), 0)} questions)</>
+          )}
+        </button>
+      </div>
+    </>
+  )
+}
+
+// ── Question Block Component ───────────────────────────────────────────────
+
+interface QuestionBlockProps {
+  question: Question
+  allQuestions: Question[]
+  allSections: SurveyCategory[]
+  index: number
+  isExpanded: boolean
+  totalQuestions: number
+  onExpand: () => void
+  onUpdate: (updates: Partial<Question>) => void
+  onRemove: () => void
+  onDuplicate: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onAddOption: (label?: string) => void
+  onRemoveOption: (optionId: string) => void
+  onUpdateOption: (optionId: string, updates: Partial<QuestionOption>) => void
+  onMoveOptionUp: (optionIndex: number) => void
+  onMoveOptionDown: (optionIndex: number) => void
+}
+
+function QuestionBlock({
+  question,
+  allQuestions,
+  allSections,
+  index,
+  isExpanded,
+  totalQuestions,
+  onExpand,
+  onUpdate,
+  onRemove,
+  onDuplicate,
+  onMoveUp,
+  onMoveDown,
+  onAddOption,
+  onRemoveOption,
+  onUpdateOption,
+  onMoveOptionUp,
+  onMoveOptionDown,
+}: QuestionBlockProps) {
+  const typeLabels: Record<QuestionType, string> = {
     short_text: 'Short Text',
     long_text: 'Long Text',
     multiple_choice: 'Multiple Choice',
@@ -994,183 +1502,267 @@ function QuestionEditor({
     number: 'Number',
   }
 
-  const addOption = () => {
-    const currentOptions = question.options || []
-    onUpdate({ options: [...currentOptions, `Option ${currentOptions.length + 1}`] })
-  }
-
-  const updateOption = (optIndex: number, value: string) => {
-    const newOptions = [...(question.options || [])]
-    newOptions[optIndex] = value
-    onUpdate({ options: newOptions })
-  }
-
-  const removeOption = (optIndex: number) => {
-    const newOptions = (question.options || []).filter((_, i) => i !== optIndex)
-    onUpdate({ options: newOptions })
-  }
+  const isSelectionQuestion = ['multiple_choice', 'checkboxes', 'dropdown'].includes(question.type)
+  const isScaleQuestion = question.type === 'linear_scale'
 
   return (
-    <div className={`border rounded-xl p-4 ${isEditing ? 'border-violet-300 bg-violet-50/30' : 'border-gray-200 bg-white'}`}>
-      <div className="flex items-start gap-3">
-        {/* Question Number */}
-        <div className="shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-sm font-semibold">
+    <div
+      className={`border rounded-xl transition-all ${
+        isExpanded
+          ? 'border-violet-300 bg-violet-50/40 shadow-sm'
+          : 'border-gray-200 bg-gray-50/30 hover:border-gray-300'
+      }`}
+    >
+      {/* Header / Collapse Toggle */}
+      <button
+        onClick={onExpand}
+        className="w-full px-4 py-3 flex items-start gap-3 hover:bg-violet-50/50 transition-colors"
+      >
+        <div className="shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-xs font-semibold">
           {index + 1}
         </div>
-
-        {/* Question Content */}
-        <div className="flex-1 min-w-0 space-y-3">
-          {/* Question Prompt */}
-          <div>
-            <input
-              id={`question-prompt-${question.id}`}
-              name={`questionPrompt_${question.id}`}
-              type="text"
-              value={question.prompt}
-              onChange={e => onUpdate({ prompt: e.target.value })}
-              onFocus={onEdit}
-              placeholder="Enter your question here..."
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
-            />
-          </div>
-
-          {/* Question Type Badge */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-              {questionTypeLabels[question.type]}
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-sm font-medium text-gray-900 truncate">
+            {typeof question.prompt === 'string' ? question.prompt : question.prompt?.text || '(untitled)'}
+          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs bg-white text-gray-600 px-2 py-0.5 rounded border border-gray-200">
+              {typeLabels[question.type]}
             </span>
-            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+            {question.required && (
+              <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded font-medium">
+                Required
+              </span>
+            )}
+          </div>
+        </div>
+        <span className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+          ▼
+        </span>
+      </button>
+
+      {/* Expanded Content */}
+      {isExpanded && (
+        <>
+          <div className="border-t border-violet-200 px-4 py-4 space-y-4">
+            {/* Question Prompt with Rich Text */}
+            <div>
+              <label htmlFor={`q-prompt-${question.id}`} className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Question <span className="text-red-400">*</span>
+              </label>
+              <RichTextEditor
+                id={`q-prompt-${question.id}`}
+                name={`question-prompt-${question.id}`}
+                value={question.prompt}
+                onChange={(richText) => onUpdate({ prompt: richText })}
+                placeholder="Enter your question here..."
+                rows={2}
+              />
+            </div>
+
+            {/* Question Description with Rich Text */}
+            {false && (
+              <div>
+                <label htmlFor={`q-desc-${question.id}`} className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Description (Optional)
+                </label>
+                <RichTextEditor
+                  id={`q-desc-${question.id}`}
+                  name={`question-description-${question.id}`}
+                  value={question.description}
+                  onChange={(richText) => onUpdate({ description: richText })}
+                  placeholder="Add help text or context for this question..."
+                  rows={2}
+                />
+              </div>
+            )}
+
+            {/* Required Checkbox */}
+            <div className="flex items-center gap-2">
               <input
-                id={`question-required-${question.id}`}
-                name={`questionRequired_${question.id}`}
+                id={`q-required-${question.id}`}
+                name={`qRequired_${question.id}`}
                 type="checkbox"
                 checked={question.required}
                 onChange={e => onUpdate({ required: e.target.checked })}
-                className="w-3.5 h-3.5 accent-violet-600"
+                className="w-4 h-4 accent-violet-600 rounded"
               />
-              Required
-            </label>
+              <label htmlFor={`q-required-${question.id}`} className="text-sm text-gray-700 cursor-pointer">
+                This question is required
+              </label>
+            </div>
+
+            {/* Skip Logic */}
+            <SkipLogicEditor
+              question={question}
+              allQuestions={allQuestions}
+              allSections={allSections}
+              skipLogic={question.skipLogic ? question.skipLogic[0] : null}
+              onUpdate={(skipLogic) => onUpdate({ skipLogic: skipLogic ? [skipLogic] : undefined })}
+            />
+
+            {/* Options for Selection Questions */}
+            {isSelectionQuestion && (
+              <div className="space-y-2 pt-2 border-t border-violet-100">
+                <p className="text-xs font-semibold text-gray-700">Options</p>
+                {(question.options || []).map((option, optIdx) => (
+                  <div key={option.id} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 shrink-0">{optIdx + 1}.</span>
+                    <input
+                      id={`opt-${question.id}-${option.id}`}
+                      name={`opt_${question.id}_${option.id}`}
+                      type="text"
+                      value={option.label}
+                      onChange={e => onUpdateOption(option.id, { label: e.target.value })}
+                      placeholder={`Option ${optIdx + 1}`}
+                      className="flex-1 px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                    <div className="flex gap-1">
+                      {optIdx > 0 && (
+                        <button
+                          onClick={() => onMoveOptionUp(optIdx)}
+                          className="p-1 text-gray-400 hover:text-gray-600 text-xs"
+                          title="Move up"
+                        >
+                          ▲
+                        </button>
+                      )}
+                      {optIdx < (question.options || []).length - 1 && (
+                        <button
+                          onClick={() => onMoveOptionDown(optIdx)}
+                          className="p-1 text-gray-400 hover:text-gray-600 text-xs"
+                          title="Move down"
+                        >
+                          ▼
+                        </button>
+                      )}
+                      {(question.options || []).length > 2 && (
+                        <button
+                          onClick={() => onRemoveOption(option.id)}
+                          className="p-1 text-red-500 hover:text-red-700 text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={() => onAddOption()}
+                  className="text-xs text-violet-600 hover:text-violet-700 font-medium mt-2"
+                >
+                  + Add Option
+                </button>
+              </div>
+            )}
+
+            {/* Scale Configuration */}
+            {isScaleQuestion && (
+              <div className="space-y-3 pt-2 border-t border-violet-100">
+                <p className="text-xs font-semibold text-gray-700">Scale Configuration</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor={`scale-min-${question.id}`} className="block text-xs text-gray-600 mb-1">
+                      Min Value
+                    </label>
+                    <input
+                      id={`scale-min-${question.id}`}
+                      name={`scaleMin_${question.id}`}
+                      type="number"
+                      min="1"
+                      value={question.scaleMin || 1}
+                      onChange={e => onUpdate({ scaleMin: parseInt(e.target.value) || 1 })}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`scale-max-${question.id}`} className="block text-xs text-gray-600 mb-1">
+                      Max Value
+                    </label>
+                    <input
+                      id={`scale-max-${question.id}`}
+                      name={`scaleMax_${question.id}`}
+                      type="number"
+                      min="2"
+                      max="10"
+                      value={question.scaleMax || 5}
+                      onChange={e => onUpdate({ scaleMax: parseInt(e.target.value) || 5 })}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor={`scale-min-label-${question.id}`} className="block text-xs text-gray-600 mb-1">
+                      Min Label
+                    </label>
+                    <input
+                      id={`scale-min-label-${question.id}`}
+                      name={`scaleMinLabel_${question.id}`}
+                      type="text"
+                      value={question.minLabel || ''}
+                      onChange={e => onUpdate({ minLabel: e.target.value })}
+                      placeholder="e.g., Strongly Disagree"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`scale-max-label-${question.id}`} className="block text-xs text-gray-600 mb-1">
+                      Max Label
+                    </label>
+                    <input
+                      id={`scale-max-label-${question.id}`}
+                      name={`scaleMaxLabel_${question.id}`}
+                      type="text"
+                      value={question.maxLabel || ''}
+                      onChange={e => onUpdate({ maxLabel: e.target.value })}
+                      placeholder="e.g., Strongly Agree"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Options (for multiple_choice, checkboxes, dropdown) */}
-          {(question.type === 'multiple_choice' || question.type === 'checkboxes' || question.type === 'dropdown') && isEditing && (
-            <div className="space-y-2 pl-2 border-l-2 border-violet-200">
-              <p className="text-xs font-medium text-gray-600">Options:</p>
-              {(question.options || []).map((option, optIndex) => (
-                <div key={optIndex} className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">{optIndex + 1}.</span>
-                  <input
-                    id={`option-${question.id}-${optIndex}`}
-                    name={`option_${question.id}_${optIndex}`}
-                    type="text"
-                    value={option}
-                    onChange={e => updateOption(optIndex, e.target.value)}
-                    className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                  {(question.options || []).length > 2 && (
-                    <button
-                      onClick={() => removeOption(optIndex)}
-                      className="text-red-500 hover:text-red-700 text-xs px-2"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
+          {/* Action Buttons */}
+          <div className="border-t border-violet-200 px-4 py-3 flex items-center justify-between gap-2">
+            <div className="flex gap-1.5">
+              {index > 0 && (
+                <button
+                  onClick={onMoveUp}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors"
+                  title="Move up"
+                >
+                  ▲
+                </button>
+              )}
+              {index < totalQuestions - 1 && (
+                <button
+                  onClick={onMoveDown}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors"
+                  title="Move down"
+                >
+                  ▼
+                </button>
+              )}
               <button
-                onClick={addOption}
-                className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+                onClick={onDuplicate}
+                className="px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-white rounded transition-colors font-medium"
+                title="Duplicate this question"
               >
-                + Add Option
+                📋 Duplicate
               </button>
             </div>
-          )}
-
-          {/* Scale Settings (for linear_scale) */}
-          {question.type === 'linear_scale' && isEditing && (
-            <div className="space-y-2 pl-2 border-l-2 border-violet-200">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label htmlFor={`scale-min-${question.id}`} className="text-xs text-gray-600">Min Value</label>
-                  <input
-                    id={`scale-min-${question.id}`}
-                    name={`scaleMin_${question.id}`}
-                    type="number"
-                    value={question.scaleMin || 1}
-                    onChange={e => onUpdate({ scaleMin: parseInt(e.target.value) || 1 })}
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                </div>
-                <div>
-                  <label htmlFor={`scale-max-${question.id}`} className="text-xs text-gray-600">Max Value</label>
-                  <input
-                    id={`scale-max-${question.id}`}
-                    name={`scaleMax_${question.id}`}
-                    type="number"
-                    value={question.scaleMax || 5}
-                    onChange={e => onUpdate({ scaleMax: parseInt(e.target.value) || 5 })}
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label htmlFor={`scale-min-label-${question.id}`} className="text-xs text-gray-600">Min Label</label>
-                  <input
-                    id={`scale-min-label-${question.id}`}
-                    name={`scaleMinLabel_${question.id}`}
-                    type="text"
-                    value={question.minLabel || ''}
-                    onChange={e => onUpdate({ minLabel: e.target.value })}
-                    placeholder="e.g., Low"
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                </div>
-                <div>
-                  <label htmlFor={`scale-max-label-${question.id}`} className="text-xs text-gray-600">Max Label</label>
-                  <input
-                    id={`scale-max-label-${question.id}`}
-                    name={`scaleMaxLabel_${question.id}`}
-                    type="text"
-                    value={question.maxLabel || ''}
-                    onChange={e => onUpdate({ maxLabel: e.target.value })}
-                    placeholder="e.g., High"
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col gap-1 shrink-0">
-          <button
-            onClick={onMoveUp}
-            disabled={!canMoveUp}
-            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-            title="Move up"
-          >
-            ↑
-          </button>
-          <button
-            onClick={onMoveDown}
-            disabled={!canMoveDown}
-            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-            title="Move down"
-          >
-            ↓
-          </button>
-          <button
-            onClick={onRemove}
-            className="p-1 text-red-400 hover:text-red-600"
-            title="Remove question"
-          >
-            🗑
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={onRemove}
+              className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors font-medium"
+            >
+              🗑️ Delete
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
-

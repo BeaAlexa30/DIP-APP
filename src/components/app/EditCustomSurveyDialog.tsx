@@ -1,67 +1,89 @@
 'use client'
 
+/**
+ * EditCustomSurveyDialog.tsx (Refactored)
+ * ═════════════════════════════════════════════════════════════
+ * Enhanced survey editing dialog with:
+ *   - Real-time local state updates before persistence
+ *   - Google Forms-style question block UI
+ *   - Duplicate and delete per question
+ *   - Full option management with drag-and-drop via arrow keys
+ *   - Advanced question settings (required, scale config, etc.)
+ */
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
-
-type QuestionType =
-  | 'short_text' | 'long_text' | 'multiple_choice' | 'checkboxes'
-  | 'dropdown' | 'linear_scale' | 'yes_no' | 'email' | 'url'
-  | 'date' | 'time' | 'number'
-
-interface CustomQuestion {
-  id: string
-  type: QuestionType
-  prompt: string
-  required: boolean
-  options?: string[]
-  scaleMin?: number
-  scaleMax?: number
-  minLabel?: string
-  maxLabel?: string
-  selectionLimit?: 'unlimited' | 'max' | 'min' | 'exact'
-  selectionCount?: number
-}
+import {
+  Question,
+  QuestionType,
+  SurveySnapshot,
+  SurveyCategory,
+  QuestionOption,
+  RichTextContent,
+  SkipLogic,
+  createQuestion,
+  validateQuestion,
+} from '@/types/SurveyBuilder'
+import RichTextEditor from '@/components/survey/RichTextEditor'
+import SectionEditor from '@/components/survey/SectionEditor'
+import SkipLogicEditor from '@/components/survey/SkipLogicEditor'
 
 interface Props {
   surveyId: string
-  snapshot: any
+  snapshot: SurveySnapshot
 }
 
-function parseQuestionsFromSnapshot(snapshot: any): CustomQuestion[] {
-  const allCats: any[] = snapshot?.categories ?? []
+/**
+ * Parse legacy snapshot format (from AI-generated or older custom surveys)
+ * and normalize to new Question interface
+ */
+function parseQuestionsFromSnapshot(snapshot: SurveySnapshot): Question[] {
+  const allCats: SurveyCategory[] = snapshot?.categories ?? []
   const raw: any[] = allCats.flatMap((c: any) => c.questions ?? [])
+
   return raw.map((q: any) => {
-    // Normalise legacy AI types to editor types
+    // Normalize legacy type names
     let type: QuestionType = q.type as QuestionType
     if ((type as string) === 'single_select') type = 'multiple_choice'
-    if ((type as string) === 'scale')         type = 'linear_scale'
+    if ((type as string) === 'scale') type = 'linear_scale'
 
-    const hasOptions = type === 'multiple_choice' || type === 'checkboxes' || type === 'dropdown'
-    const isScale    = type === 'linear_scale'
+    const hasOptions = ['multiple_choice', 'checkboxes', 'dropdown'].includes(type)
+    const isScale = type === 'linear_scale'
 
     return {
       id: q.id ?? `q-${Math.random().toString(36).substr(2, 9)}`,
       type,
       prompt: q.prompt ?? '',
       required: q.required ?? false,
-      ...(hasOptions ? {
-        options: (q.options ?? []).map((o: any) =>
-          typeof o === 'string' ? o : (o.label ?? '')
-        ),
-      } : {}),
-      ...(isScale ? {
-        scaleMin: q.scaleMin ?? 1,
-        scaleMax: q.scaleMax ?? 5,
-        minLabel: q.minLabel ?? 'Low',
-        maxLabel: q.maxLabel ?? 'High',
-      } : {}),
 
-        ...(type === 'checkboxes' ? {
-          selectionLimit: q.selectionLimit ?? 'unlimited',
-          selectionCount: q.selectionCount ?? undefined,
-        } : {}),
-    }
+      ...(hasOptions
+        ? {
+            options: (q.options ?? []).map((o: any, idx: number) => {
+              const label = typeof o === 'string' ? o : o.label ?? ''
+              return {
+                id: o.id ?? `opt-${idx}`,
+                label,
+                value_key: o.value_key ?? label.toLowerCase().replace(/\s+/g, '_'),
+                order: o.order ?? idx + 1,
+              } as QuestionOption
+            }),
+          }
+        : {}),
+
+      ...(isScale
+        ? {
+            scaleMin: q.scaleMin ?? 1,
+            scaleMax: q.scaleMax ?? 5,
+            minLabel: q.minLabel ?? 'Low',
+            maxLabel: q.maxLabel ?? 'High',
+          }
+        : {}),
+
+      ...(type === 'checkboxes' && q.selectionLimit
+        ? { selectionLimit: q.selectionLimit }
+        : {}),
+    } as Question
   })
 }
 
@@ -71,16 +93,27 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
 
   const [isOpen, setIsOpen] = useState(false)
   const [title, setTitle] = useState('')
-  const [questions, setQuestions] = useState<CustomQuestion[]>([])
-  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
+  const [description, setDescription] = useState<RichTextContent | undefined>()
+  const [sections, setSections] = useState<SurveyCategory[]>([])
+  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null)
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
   function handleOpen() {
     setTitle(snapshot?.packName ?? '')
-    setQuestions(parseQuestionsFromSnapshot(snapshot))
-    setEditingQuestionId(null)
+    const desc = snapshot?.description
+    if (!desc) {
+      setDescription(undefined)
+    } else if (typeof desc === 'string') {
+      setDescription({ text: desc })
+    } else {
+      setDescription(desc as RichTextContent)
+    }
+    setSections(snapshot?.categories ?? [])
+    setExpandedQuestionId(null)
+    setExpandedSectionId(null)
     setSaving(false)
     setError(null)
     setSuccess(false)
@@ -91,54 +124,293 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     setIsOpen(false)
   }
 
-  function addQuestion(type: QuestionType) {
-    const newQ: CustomQuestion = {
-      id: `q-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      type,
-      prompt: '',
-      required: false,
-      ...(type === 'multiple_choice' || type === 'checkboxes' || type === 'dropdown'
-        ? { options: ['Option 1', 'Option 2'] }
-        : {}),
-      ...(type === 'linear_scale' ? { scaleMin: 1, scaleMax: 5, minLabel: 'Low', maxLabel: 'High' } : {}),
-      ...(type === 'checkboxes' ? { selectionLimit: 'unlimited', selectionCount: undefined } : {}),
+  // Render rich text with formatting
+  const renderRichText = (content: string | RichTextContent | undefined) => {
+    if (!content) return null
+    
+    const text = typeof content === 'string' ? content : content?.text || ''
+    const marks = typeof content === 'object' && content.marks ? content.marks : []
+    
+    if (!marks || marks.length === 0) {
+      return text
     }
-    setQuestions(prev => [...prev, newQ])
-    setEditingQuestionId(newQ.id)
+
+    // Sort marks by start position
+    const sortedMarks = [...marks].sort((a, b) => a.start - b.start)
+    const segments: Array<{ text: string; marks: any[] }> = []
+    let lastEnd = 0
+
+    sortedMarks.forEach(mark => {
+      if (mark.start > lastEnd) {
+        segments.push({ text: text.substring(lastEnd, mark.start), marks: [] })
+      }
+
+      const markText = text.substring(mark.start, mark.end)
+      const existingSegment = segments.find(s => s.text === markText && s.marks.some(m => m.type === mark.type))
+      if (!existingSegment) {
+        segments.push({ text: markText, marks: [mark] })
+      }
+      lastEnd = mark.end
+    })
+
+    if (lastEnd < text.length) {
+      segments.push({ text: text.substring(lastEnd), marks: [] })
+    }
+
+    return (
+      <span>
+        {segments.map((seg, idx) => {
+          let element: React.ReactNode = seg.text
+          
+          seg.marks.forEach(mark => {
+            if (mark.type === 'bold') {
+              element = <strong key={`${idx}-bold`}>{element}</strong>
+            } else if (mark.type === 'italic') {
+              element = <em key={`${idx}-italic`}>{element}</em>
+            } else if (mark.type === 'underline') {
+              element = <u key={`${idx}-underline`}>{element}</u>
+            } else if (mark.type === 'strikethrough') {
+              element = <s key={`${idx}-strikethrough`}>{element}</s>
+            } else if (mark.type === 'link' && mark.url) {
+              element = <a key={`${idx}-link`} href={mark.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{element}</a>
+            }
+          })
+          
+          return <span key={idx}>{element}</span>
+        })}
+      </span>
+    )
+  }
+
+  function addNewSection() {
+    const newSection: SurveyCategory = {
+      id: `sec-${Date.now()}`,
+      name: `Section ${sections.length + 1}`,
+      description: '',
+      order: sections.length + 1,
+      questions: [],
+    }
+    setSections(prev => [...prev, newSection])
+    setExpandedSectionId(newSection.id)
+  }
+
+  function removeSection(id: string) {
+    setSections(prev => prev.filter(s => s.id !== id))
+    if (expandedSectionId === id) setExpandedSectionId(null)
+  }
+
+  function updateSection(id: string, updates: Partial<SurveyCategory>) {
+    setSections(prev =>
+      prev.map(s => (s.id === id ? { ...s, ...updates } : s))
+    )
+  }
+
+  function moveSectionUp(index: number) {
+    if (index === 0) return
+    setSections(prev => {
+      const arr = [...prev]
+      ;[arr[index - 1], arr[index]] = [arr[index], arr[index - 1]]
+      return arr.map((s, idx) => ({ ...s, order: idx + 1 }))
+    })
+  }
+
+  function moveSectionDown(index: number) {
+    if (index === sections.length - 1) return
+    setSections(prev => {
+      const arr = [...prev]
+      ;[arr[index], arr[index + 1]] = [arr[index + 1], arr[index]]
+      return arr.map((s, idx) => ({ ...s, order: idx + 1 }))
+    })
+  }
+
+  function addNewQuestion(type: QuestionType) {
+    const targetSection = sections.length > 0 ? sections[0] : null
+    if (!targetSection) {
+      addNewSection()
+      return
+    }
+    
+    const newQuestion = createQuestion(type)
+    setSections(prev =>
+      prev.map(s =>
+        s.id === targetSection.id
+          ? { ...s, questions: [...(s.questions || []), newQuestion] }
+          : s
+      )
+    )
+    setExpandedQuestionId(newQuestion.id)
+    setExpandedSectionId(targetSection.id)
   }
 
   function removeQuestion(id: string) {
-    setQuestions(prev => prev.filter(q => q.id !== id))
-    if (editingQuestionId === id) setEditingQuestionId(null)
+    setSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).filter(q => q.id !== id)
+      }))
+    )
+    if (expandedQuestionId === id) setExpandedQuestionId(null)
   }
 
-  function updateQuestion(id: string, updates: Partial<CustomQuestion>) {
-    setQuestions(prev => prev.map(q => (q.id === id ? { ...q, ...updates } : q)))
+  function updateQuestion(id: string, updates: Partial<Question>) {
+    setSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => (q.id === id ? { ...q, ...updates } : q))
+      }))
+    )
   }
 
-  function moveUp(index: number) {
-    if (index === 0) return
-    setQuestions(prev => {
-      const arr = [...prev]
-      ;[arr[index - 1], arr[index]] = [arr[index], arr[index - 1]]
-      return arr
-    })
+  function changeQuestionType(sectionId: string, questionId: string, newType: string) {
+    setSections(prev =>
+      prev.map(s => {
+        if (s.id !== sectionId) return s
+        return {
+          ...s,
+          questions: (s.questions || []).map(q => {
+            if (q.id !== questionId) return q
+            const newQuestion: Question = {
+              id: q.id,
+              type: newType as QuestionType,
+              prompt: q.prompt,
+              required: q.required,
+              order: q.order,
+            }
+            if (['multiple_choice', 'checkboxes', 'dropdown'].includes(newType)) {
+              newQuestion.options = q.options && q.options.length > 0 
+                ? q.options 
+                : [
+                    { id: `${questionId}-opt-1`, label: 'Option 1', value_key: 'option_1', order: 1 },
+                    { id: `${questionId}-opt-2`, label: 'Option 2', value_key: 'option_2', order: 2 },
+                  ]
+              // Preserve selection limit for checkboxes
+              if (newType === 'checkboxes' && (q as any).selectionLimit) {
+                newQuestion.selectionLimit = (q as any).selectionLimit
+              }
+            }
+            if (newType === 'linear_scale') {
+              newQuestion.scaleMin = q.scaleMin || 1
+              newQuestion.scaleMax = q.scaleMax || 5
+              newQuestion.minLabel = q.minLabel || 'Strongly Disagree'
+              newQuestion.maxLabel = q.maxLabel || 'Strongly Agree'
+            }
+            return newQuestion
+          })
+        }
+      })
+    )
   }
 
-  function moveDown(index: number) {
-    if (index === questions.length - 1) return
-    setQuestions(prev => {
-      const arr = [...prev]
-      ;[arr[index], arr[index + 1]] = [arr[index + 1], arr[index]]
-      return arr
-    })
+  function addOptionToQuestion(questionId: string, label: string = '') {
+    setSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => {
+          if (q.id !== questionId) return q
+          const newOptions = [...(q.options || [])]
+          const newId = `${questionId}-opt-${newOptions.length}`
+          newOptions.push({
+            id: newId,
+            label: label || `Option ${newOptions.length + 1}`,
+            value_key: (label || `Option ${newOptions.length + 1}`)
+              .toLowerCase()
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '_'),
+            order: newOptions.length,
+          })
+          return { ...q, options: newOptions }
+        })
+      }))
+    )
+  }
+
+  function removeOptionFromQuestion(questionId: string, optionId: string) {
+    setSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => {
+          if (q.id !== questionId) return q
+          return {
+            ...q,
+            options: (q.options || []).filter(o => o.id !== optionId).map((o, idx) => ({ ...o, order: idx + 1 })),
+          }
+        })
+      }))
+    )
+  }
+
+  function updateOption(questionId: string, optionId: string, updates: Partial<QuestionOption>) {
+    setSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => {
+          if (q.id !== questionId) return q
+          return {
+            ...q,
+            options: (q.options || []).map(o =>
+              o.id === optionId ? { ...o, ...updates } : o
+            ),
+          }
+        })
+      }))
+    )
+  }
+
+  function moveOptionUp(questionId: string, optionIndex: number) {
+    if (optionIndex === 0) return
+    setSections(prev =>
+      prev.map(s => ({
+        ...s,
+        questions: (s.questions || []).map(q => {
+          if (q.id !== questionId) return q
+          const opts = [...(q.options || [])]
+          ;[opts[optionIndex - 1], opts[optionIndex]] = [opts[optionIndex], opts[optionIndex - 1]]
+          return {
+            ...q,
+            options: opts.map((o, idx) => ({ ...o, order: idx + 1 })),
+          }
+        })
+      }))
+    )
+  }
+
+  function moveOptionDown(questionId: string, optionIndex: number) {
+    setSections(prev =>
+      prev.map(s => {
+        const q = (s.questions || []).find(qq => qq.id === questionId)
+        if (!q || !q.options || optionIndex === q.options.length - 1) return s
+        
+        return {
+          ...s,
+          questions: (s.questions || []).map(qq => {
+            if (qq.id !== questionId) return qq
+            const opts = [...(qq.options || [])]
+            ;[opts[optionIndex], opts[optionIndex + 1]] = [opts[optionIndex + 1], opts[optionIndex]]
+            return {
+              ...qq,
+              options: opts.map((o, idx) => ({ ...o, order: idx + 1 })),
+            }
+          })
+        }
+      })
+    )
   }
 
   async function handleSave() {
-    if (!title.trim() || questions.length === 0) return
-    const invalid = questions.filter(q => !q.prompt.trim())
-    if (invalid.length > 0) {
-      setError('All questions must have a prompt text.')
+    // Validation
+    const totalQuestions = sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0)
+    if (!title.trim() || totalQuestions === 0) {
+      setError('Survey title and at least one question are required.')
+      return
+    }
+
+    const validationErrors = sections
+      .flatMap(s => s.questions || [])
+      .flatMap(q => validateQuestion(q))
+    if (validationErrors.length > 0) {
+      setError(
+        `Validation errors:\n${validationErrors.map(e => `- ${e.message}`).join('\n')}`
+      )
       return
     }
 
@@ -146,45 +418,25 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     setError(null)
 
     try {
-      const newSnapshot = {
+      // Build updated snapshot with sections
+      const categories: SurveyCategory[] = sections.map((section, idx) => ({
+        ...section,
+        order: idx + 1,
+        questions: (section.questions || []).map((q, qIdx) => ({
+          ...q,
+          order: qIdx + 1,
+          options: q.options?.map((opt, optIdx) => ({
+            ...opt,
+            order: optIdx + 1,
+          })),
+        })),
+      }))
+
+      const newSnapshot: SurveySnapshot = {
         ...snapshot,
         packName: title,
-        categories: [
-          {
-            id: 'custom-category',
-            name: 'Survey Questions',
-            order: 1,
-            questions: questions.map((q, idx) => ({
-              id: q.id,
-              type: q.type,
-              prompt: q.prompt,
-              required: q.required,
-              order: idx + 1,
-              ...(q.options
-                ? {
-                    options: q.options.map((opt, optIdx) => ({
-                      id: `${q.id}-opt-${optIdx}`,
-                      label: opt,
-                      value_key: opt.toLowerCase().replace(/\s+/g, '_'),
-                      order: optIdx + 1,
-                    })),
-                  }
-                : {}),
-              ...(q.type === 'linear_scale'
-                ? {
-                    scaleMin: q.scaleMin ?? 1,
-                    scaleMax: q.scaleMax ?? 5,
-                    minLabel: q.minLabel,
-                    maxLabel: q.maxLabel,
-                  }
-                : {}),
-
-              ...(q.type === 'checkboxes' && q.selectionLimit && q.selectionLimit !== 'unlimited'
-                ? { selectionLimit: q.selectionLimit, selectionCount: q.selectionCount }
-                : {}),
-            })),
-          },
-        ],
+        description: description,
+        categories,
       }
 
       const { error: updateErr } = await (supabase as any)
@@ -192,7 +444,9 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
         .update({ pack_version_snapshot: newSnapshot })
         .eq('id', surveyId)
 
-      if (updateErr) throw new Error(updateErr.message)
+      if (updateErr) {
+        throw new Error(updateErr.message || 'Failed to save survey')
+      }
 
       setSuccess(true)
       setTimeout(() => {
@@ -217,19 +471,24 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
 
       {isOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col">
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Edit Survey Questions</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Changes apply to new responses immediately</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Changes apply to new responses immediately
+                </p>
               </div>
-              <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">
+              <button
+                onClick={handleClose}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
                 ×
               </button>
             </div>
 
-            <div className="px-6 py-6 space-y-5 flex-1">
+            <div className="px-6 py-6 space-y-5 flex-1 overflow-y-auto">
               {!success ? (
                 <>
                   {/* Title */}
@@ -243,67 +502,123 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                       type="text"
                       value={title}
                       onChange={e => setTitle(e.target.value)}
+                      placeholder="e.g., Customer Satisfaction Survey"
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
                     />
                   </div>
 
-                  {/* Questions */}
-                  {questions.length > 0 && (
+                  {/* Description */}
+                  <div>
+                    <label htmlFor="edit-survey-description" className="block text-sm font-semibold text-gray-800 mb-2">
+                      Form Description <span className="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <RichTextEditor
+                      id="edit-survey-description"
+                      name="editSurveyDescription"
+                      value={description}
+                      onChange={setDescription}
+                      placeholder="Add context or instructions for respondents..."
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Live Preview */}
+                  {(title || description) && (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-3">
+                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Preview</p>
+                      {title && (
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{title}</p>
+                        </div>
+                      )}
+                      {description && (
+                        <div className="text-xs text-gray-700 whitespace-pre-wrap">
+                          {typeof description === 'string'
+                            ? description
+                            : renderRichText(description)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Sections Management */}
+                  {sections.length > 0 && (
                     <div className="space-y-3">
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Questions ({questions.length})
+                        Sections ({sections.length})
                       </p>
-                      {questions.map((q, i) => (
-                        <QuestionEditor
-                          key={q.id}
-                          question={q}
-                          index={i}
-                          isEditing={editingQuestionId === q.id}
-                          onEdit={() => setEditingQuestionId(q.id)}
-                          onUpdate={updates => updateQuestion(q.id, updates)}
-                          onRemove={() => removeQuestion(q.id)}
-                          onMoveUp={() => moveUp(i)}
-                          onMoveDown={() => moveDown(i)}
-                          canMoveUp={i > 0}
-                          canMoveDown={i < questions.length - 1}
+                      {sections.map((section, index) => (
+                        <SectionEditor
+                          key={section.id}
+                          section={{
+                            ...section,
+                            order: index + 1,
+                          }}
+                          allSections={sections}
+                          isExpanded={expandedSectionId === section.id}
+                          onExpand={() => setExpandedSectionId(section.id === expandedSectionId ? null : section.id)}
+                          onUpdate={(updates) => updateSection(section.id, updates)}
+                          onRemove={() => removeSection(section.id)}
+                          onMoveUp={() => moveSectionUp(index)}
+                          onMoveDown={() => moveSectionDown(index)}
+                          canMoveUp={index > 0}
+                          canMoveDown={index < sections.length - 1}
+                          onAddQuestion={(sectionId, type) => addNewQuestion(type as QuestionType)}
+                          onRemoveQuestion={(sectionId, qId) => removeQuestion(qId)}
+                          onUpdateQuestion={(sectionId, qId, updates) => updateQuestion(qId, updates)}
+                          onAddOption={addOptionToQuestion}
+                          onRemoveOption={removeOptionFromQuestion}
+                          onUpdateOption={updateOption}
+                          onMoveOptionUp={moveOptionUp}
+                          onMoveOptionDown={moveOptionDown}
+                          expandedQuestionId={expandedQuestionId}
+                          onExpandQuestion={(id: string | null) => setExpandedQuestionId(id === expandedQuestionId ? null : id)}
+                          onChangeQuestionType={changeQuestionType}
                         />
                       ))}
                     </div>
                   )}
 
+                  <button
+                    onClick={addNewSection}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 mb-4"
+                  >
+                    + Add Section
+                  </button>
+
                   {/* Add Question */}
                   <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs font-semibold text-gray-600 mb-3">Add Question Type:</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(
-                        [
-                          ['short_text', '📝 Short Text'],
-                          ['long_text', '📄 Long Text'],
-                          ['multiple_choice', '⭕ Multiple Choice'],
-                          ['checkboxes', '☑️ Checkboxes'],
-                          ['dropdown', '🔽 Dropdown'],
-                          ['linear_scale', '📊 Linear Scale'],
-                          ['yes_no', '✓✗ Yes/No'],
-                          ['email', '✉️ Email'],
-                          ['url', '🔗 URL'],
-                          ['date', '📅 Date'],
-                          ['time', '🕐 Time'],
-                          ['number', '🔢 Number'],
-                        ] as [QuestionType, string][]
-                      ).map(([type, label]) => (
-                        <button
-                          key={type}
-                          onClick={() => addQuestion(type)}
-                          className="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
+                    <label htmlFor="add-question-select" className="block text-xs font-semibold text-gray-600 mb-2">
+                      Add Question to First Section:
+                    </label>
+                    <select
+                      id="add-question-select"
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          addNewQuestion(e.target.value as QuestionType)
+                          e.target.value = ''
+                        }
+                      }}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                    >
+                      <option value="">Select a question type...</option>
+                      <option value="short_text">📝 Short Text</option>
+                      <option value="long_text">📄 Long Text (Paragraph)</option>
+                      <option value="multiple_choice">⭕ Multiple Choice</option>
+                      <option value="checkboxes">☑️ Checkboxes</option>
+                      <option value="dropdown">🔽 Dropdown</option>
+                      <option value="linear_scale">📊 Linear Scale</option>
+                      <option value="yes_no">✓✗ Yes/No</option>
+                      <option value="email">✉️ Email</option>
+                      <option value="url">🔗 URL</option>
+                      <option value="date">📅 Date</option>
+                      <option value="time">🕐 Time</option>
+                      <option value="number">🔢 Number</option>
+                    </select>
                   </div>
 
                   {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 whitespace-pre-wrap">
                       {error}
                     </div>
                   )}
@@ -318,7 +633,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                     </button>
                     <button
                       onClick={handleSave}
-                      disabled={!title.trim() || questions.length === 0 || saving}
+                      disabled={!title.trim() || sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0) === 0 || saving}
                       className="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-40 transition-all flex items-center justify-center gap-2"
                     >
                       {saving ? (
@@ -327,7 +642,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                           Saving…
                         </>
                       ) : (
-                        `💾 Save Changes (${questions.length} question${questions.length !== 1 ? 's' : ''})`
+                        <>💾 Save Changes ({sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0)})</>
                       )}
                     </button>
                   </div>
@@ -338,7 +653,9 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                     <span className="text-3xl">✓</span>
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-1">Survey Updated!</h3>
-                  <p className="text-sm text-gray-500">Your changes have been saved successfully.</p>
+                  <p className="text-sm text-gray-500">
+                    Your changes have been saved successfully.
+                  </p>
                 </div>
               )}
             </div>
@@ -349,32 +666,47 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
   )
 }
 
-// ── Question Editor ────────────────────────────────────────────────────────────
-interface QuestionEditorProps {
-  question: CustomQuestion
+// ── Question Edit Block Component ──────────────────────────────────────────
+
+interface QuestionEditBlockProps {
+  question: Question
+  allQuestions: Question[]
+  allSections: SurveyCategory[]
   index: number
-  isEditing: boolean
-  onEdit: () => void
-  onUpdate: (updates: Partial<CustomQuestion>) => void
+  isExpanded: boolean
+  totalQuestions: number
+  onExpand: () => void
+  onUpdate: (updates: Partial<Question>) => void
   onRemove: () => void
+  onDuplicate: () => void
   onMoveUp: () => void
   onMoveDown: () => void
-  canMoveUp: boolean
-  canMoveDown: boolean
+  onAddOption: (label?: string) => void
+  onRemoveOption: (optionId: string) => void
+  onUpdateOption: (optionId: string, updates: Partial<QuestionOption>) => void
+  onMoveOptionUp: (optionIndex: number) => void
+  onMoveOptionDown: (optionIndex: number) => void
 }
 
-function QuestionEditor({
+function QuestionEditBlock({
   question,
+  allQuestions,
+  allSections,
   index,
-  isEditing,
-  onEdit,
+  isExpanded,
+  totalQuestions,
+  onExpand,
   onUpdate,
   onRemove,
+  onDuplicate,
   onMoveUp,
   onMoveDown,
-  canMoveUp,
-  canMoveDown,
-}: QuestionEditorProps) {
+  onAddOption,
+  onRemoveOption,
+  onUpdateOption,
+  onMoveOptionUp,
+  onMoveOptionDown,
+}: QuestionEditBlockProps) {
   const typeLabels: Record<QuestionType, string> = {
     short_text: 'Short Text',
     long_text: 'Long Text',
@@ -390,259 +722,278 @@ function QuestionEditor({
     number: 'Number',
   }
 
-  const addOption = () => {
-    const current = question.options ?? []
-    const hasOther = current.includes('__other__')
-    
-    if (hasOther) {
-      // Insert questions before other option so that its always at the end of the list of options
-      const without = current.filter(o => o !== '__other__')
-      onUpdate({ options: [...without, `Option ${without.length + 1}`, '__other__'] })
-    } else {
-      onUpdate({ options: [...current, `Option ${current.length + 1}`] })
-    }
-}
-
-  const updateOption = (i: number, value: string) => {
-    const opts = [...(question.options ?? [])]
-    opts[i] = value
-    onUpdate({ options: opts })
-  }
-
-  const removeOption = (i: number) => {
-    onUpdate({ options: (question.options ?? []).filter((_, idx) => idx !== i) })
-  }
+  const isSelectionQuestion = ['multiple_choice', 'checkboxes', 'dropdown'].includes(
+    question.type
+  )
+  const isScaleQuestion = question.type === 'linear_scale'
 
   return (
     <div
-      className={`border rounded-xl p-4 ${
-        isEditing ? 'border-violet-300 bg-violet-50/30' : 'border-gray-200 bg-white'
+      className={`border rounded-xl transition-all ${
+        isExpanded
+          ? 'border-violet-300 bg-violet-50/40 shadow-sm'
+          : 'border-gray-200 bg-gray-50/30 hover:border-gray-300'
       }`}
     >
-      <div className="flex items-start gap-3">
-        {/* Number */}
-        <div className="shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-sm font-semibold">
+      {/* Header / Collapse Toggle */}
+      <button
+        onClick={onExpand}
+        className="w-full px-4 py-3 flex items-start gap-3 hover:bg-violet-50/50 transition-colors"
+      >
+        <div className="shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-xs font-semibold">
           {index + 1}
         </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0 space-y-3">
-          <input
-            id={`q-prompt-${question.id}`}
-            name={`qPrompt_${question.id}`}
-            type="text"
-            value={question.prompt}
-            onChange={e => onUpdate({ prompt: e.target.value })}
-            onFocus={onEdit}
-            placeholder="Enter your question here..."
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
-          />
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-sm font-medium text-gray-900 truncate">
+            {typeof question.prompt === 'string' ? question.prompt : question.prompt?.text || '(untitled)'}
+          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs bg-white text-gray-600 px-2 py-0.5 rounded border border-gray-200">
               {typeLabels[question.type]}
             </span>
-            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+            {question.required && (
+              <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded font-medium">
+                Required
+              </span>
+            )}
+          </div>
+        </div>
+        <span
+          className={`text-gray-400 transition-transform shrink-0 ${
+            isExpanded ? 'rotate-180' : ''
+          }`}
+        >
+          ▼
+        </span>
+      </button>
+
+      {/* Expanded Content */}
+      {isExpanded && (
+        <>
+          <div className="border-t border-violet-200 px-4 py-4 space-y-4">
+            {/* Question Prompt with Rich Text */}
+            <div>
+              <label
+                htmlFor={`edit-q-prompt-${question.id}`}
+                className="block text-xs font-semibold text-gray-700 mb-1.5"
+              >
+                Question <span className="text-red-400">*</span>
+              </label>
+              <RichTextEditor
+                id={`edit-q-prompt-${question.id}`}
+                name={`edit-question-prompt-${question.id}`}
+                value={question.prompt}
+                onChange={(richText) => onUpdate({ prompt: richText })}
+                placeholder="Enter your question here..."
+                rows={2}
+              />
+            </div>
+
+            {/* Required Checkbox */}
+            <div className="flex items-center gap-2">
               <input
-                id={`q-required-${question.id}`}
-                name={`qRequired_${question.id}`}
+                id={`edit-q-required-${question.id}`}
+                name={`editQRequired_${question.id}`}
                 type="checkbox"
                 checked={question.required}
                 onChange={e => onUpdate({ required: e.target.checked })}
-                className="w-3.5 h-3.5 accent-violet-600"
+                className="w-4 h-4 accent-violet-600 rounded"
               />
-              Required
-            </label>
-          </div>
+              <label
+                htmlFor={`edit-q-required-${question.id}`}
+                className="text-sm text-gray-700 cursor-pointer"
+              >
+                This question is required
+              </label>
+            </div>
 
-          {/* Options */}
-          {(question.type === 'multiple_choice' ||
-            question.type === 'checkboxes' ||
-            question.type === 'dropdown') &&
-            isEditing && (
-              <div className="space-y-2 pl-2 border-l-2 border-violet-200">
-                <p className="text-xs font-medium text-gray-600">Options:</p>
-                {(question.options ?? []).map((opt, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">{i + 1}.</span>
-                    {opt === '__other__' ? (
-                      // read only row for "Other" 
-                      <div className="flex-1 px-2 py-1 border border-dashed border-gray-300 rounded text-sm text-gray-400 italic">
-                        Other: ___________
-                      </div>
-                    ) : (
-                      <input
-                        id={`opt-${question.id}-${i}`}
-                        name={`opt_${question.id}_${i}`}
-                        type="text"
-                        value={opt}
-                        onChange={e => updateOption(i, e.target.value)}
-                        className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
-                      />
-                    )}
-                    {(question.options ?? []).length > 2 && (
-                      <button
-                        onClick={() => removeOption(i)}
-                        className="text-red-500 hover:text-red-700 text-xs px-2"
-                      >
-                        ✕
-                      </button>
-                    )}
+            {/* Skip Logic */}
+            <SkipLogicEditor
+              question={question}
+              allQuestions={allQuestions}
+              allSections={allSections}
+              skipLogic={question.skipLogic ? question.skipLogic[0] : null}
+              onUpdate={(skipLogic) => onUpdate({ skipLogic: skipLogic ? [skipLogic] : undefined })}
+            />
+
+            {/* Options for Selection Questions */}
+            {isSelectionQuestion && (
+              <div className="space-y-2 pt-2 border-t border-violet-100">
+                <p className="text-xs font-semibold text-gray-700">Options</p>
+                {(question.options || []).map((option, optIdx) => (
+                  <div key={option.id} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 shrink-0">{optIdx + 1}.</span>
+                    <input
+                      id={`edit-opt-${question.id}-${option.id}`}
+                      name={`editOpt_${question.id}_${option.id}`}
+                      type="text"
+                      value={option.label}
+                      onChange={e => onUpdateOption(option.id, { label: e.target.value })}
+                      placeholder={`Option ${optIdx + 1}`}
+                      className="flex-1 px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                    <div className="flex gap-1">
+                      {optIdx > 0 && (
+                        <button
+                          onClick={() => onMoveOptionUp(optIdx)}
+                          className="p-1 text-gray-400 hover:text-gray-600 text-xs"
+                          title="Move up"
+                        >
+                          ▲
+                        </button>
+                      )}
+                      {optIdx < (question.options || []).length - 1 && (
+                        <button
+                          onClick={() => onMoveOptionDown(optIdx)}
+                          className="p-1 text-gray-400 hover:text-gray-600 text-xs"
+                          title="Move down"
+                        >
+                          ▼
+                        </button>
+                      )}
+                      {(question.options || []).length > 2 && (
+                        <button
+                          onClick={() => onRemoveOption(option.id)}
+                          className="p-1 text-red-500 hover:text-red-700 text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
                 <button
-                  onClick={addOption}
-                  className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+                  onClick={() => onAddOption()}
+                  className="text-xs text-violet-600 hover:text-violet-700 font-medium mt-2"
                 >
                   + Add Option
                 </button>
+              </div>
+            )}
 
-                {/* Add Other Option */}
-                  {question.type !== 'dropdown' && !(question.options ?? []).includes('__other__') && (
-                    <button
-                      onClick={() => onUpdate({ options: [...(question.options ?? []), '__other__'] })}
-                      className="text-xs text-gray-500 hover:text-gray-700 font-medium ml-3"
+            {/* Scale Configuration */}
+            {isScaleQuestion && (
+              <div className="space-y-3 pt-2 border-t border-violet-100">
+                <p className="text-xs font-semibold text-gray-700">Scale Configuration</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor={`edit-scale-min-${question.id}`}
+                      className="block text-xs text-gray-600 mb-1"
                     >
-                      + Add Other
-                    </button>
-                  )}
-              </div>
-            )}
-
-            {question.type === 'checkboxes' && isEditing && (
-             <div className="flex flex-row justify-between items-center mt-2">
-                <select
-                  value={question.selectionLimit ?? 'unlimited'}
-                  onChange={e =>
-                    onUpdate({
-                      selectionLimit: e.target.value as CustomQuestion['selectionLimit'],
-                      selectionCount: undefined,
-                    })
-                  }
-                  className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                >
-                  <option value="unlimited">Unlimited selections</option>
-                  <option value="max">Maximum selections</option>
-                  <option value="min">Minimum selections</option>
-                  <option value="exact">Exact selections</option>
-                </select>
-
-                {question.selectionLimit && question.selectionLimit !== 'unlimited' && (
-                  <input
-                    type="number"
-                    min={1}
-                    max={(question.options ?? []).length}
-                    value={question.selectionCount ?? ''}
-                    onChange={e => {
-                      const max = (question.options ?? []).length
-                      const val = parseInt(e.target.value)
-                      if (isNaN(val)) {
-                        onUpdate({ selectionCount: undefined })
-                        return
+                      Min Value
+                    </label>
+                    <input
+                      id={`edit-scale-min-${question.id}`}
+                      name={`editScaleMin_${question.id}`}
+                      type="number"
+                      min="1"
+                      value={question.scaleMin || 1}
+                      onChange={e =>
+                        onUpdate({ scaleMin: parseInt(e.target.value) || 1 })
                       }
-                      onUpdate({
-                        selectionCount: val > max ? max : val < 1 ? 1 : val
-                      })
-                    }}
-                    placeholder={
-                      question.selectionLimit === 'max' ? 'Max number...' :
-                      question.selectionLimit === 'min' ? 'Min number...' :
-                      'Exact number...'
-                    }
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                )}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`edit-scale-max-${question.id}`}
+                      className="block text-xs text-gray-600 mb-1"
+                    >
+                      Max Value
+                    </label>
+                    <input
+                      id={`edit-scale-max-${question.id}`}
+                      name={`editScaleMax_${question.id}`}
+                      type="number"
+                      min="2"
+                      max="10"
+                      value={question.scaleMax || 5}
+                      onChange={e =>
+                        onUpdate({ scaleMax: parseInt(e.target.value) || 5 })
+                      }
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor={`edit-scale-min-label-${question.id}`}
+                      className="block text-xs text-gray-600 mb-1"
+                    >
+                      Min Label
+                    </label>
+                    <input
+                      id={`edit-scale-min-label-${question.id}`}
+                      name={`editScaleMinLabel_${question.id}`}
+                      type="text"
+                      value={question.minLabel || ''}
+                      onChange={e => onUpdate({ minLabel: e.target.value })}
+                      placeholder="e.g., Strongly Disagree"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`edit-scale-max-label-${question.id}`}
+                      className="block text-xs text-gray-600 mb-1"
+                    >
+                      Max Label
+                    </label>
+                    <input
+                      id={`edit-scale-max-label-${question.id}`}
+                      name={`editScaleMaxLabel_${question.id}`}
+                      type="text"
+                      value={question.maxLabel || ''}
+                      onChange={e => onUpdate({ maxLabel: e.target.value })}
+                      placeholder="e.g., Strongly Agree"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    />
+                  </div>
+                </div>
               </div>
             )}
+          </div>
 
-          {/* Scale */}
-          {question.type === 'linear_scale' && isEditing && (
-            <div className="space-y-2 pl-2 border-l-2 border-violet-200">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label htmlFor={`scale-min-${question.id}`} className="text-xs text-gray-600">
-                    Min Value
-                  </label>
-                  <input
-                    id={`scale-min-${question.id}`}
-                    name={`scaleMin_${question.id}`}
-                    type="number"
-                    value={question.scaleMin ?? 1}
-                    onChange={e => onUpdate({ scaleMin: parseInt(e.target.value) || 1 })}
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                </div>
-                <div>
-                  <label htmlFor={`scale-max-${question.id}`} className="text-xs text-gray-600">
-                    Max Value
-                  </label>
-                  <input
-                    id={`scale-max-${question.id}`}
-                    name={`scaleMax_${question.id}`}
-                    type="number"
-                    value={question.scaleMax ?? 5}
-                    onChange={e => onUpdate({ scaleMax: parseInt(e.target.value) || 5 })}
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label htmlFor={`scale-min-label-${question.id}`} className="text-xs text-gray-600">
-                    Min Label
-                  </label>
-                  <input
-                    id={`scale-min-label-${question.id}`}
-                    name={`scaleMinLabel_${question.id}`}
-                    type="text"
-                    value={question.minLabel ?? ''}
-                    onChange={e => onUpdate({ minLabel: e.target.value })}
-                    placeholder="e.g., Low"
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                </div>
-                <div>
-                  <label htmlFor={`scale-max-label-${question.id}`} className="text-xs text-gray-600">
-                    Max Label
-                  </label>
-                  <input
-                    id={`scale-max-label-${question.id}`}
-                    name={`scaleMaxLabel_${question.id}`}
-                    type="text"
-                    value={question.maxLabel ?? ''}
-                    onChange={e => onUpdate({ maxLabel: e.target.value })}
-                    placeholder="e.g., High"
-                    className="w-full px-2 py-1 border border-gray-200 rounded text-sm"
-                  />
-                </div>
-              </div>
+          {/* Action Buttons */}
+          <div className="border-t border-violet-200 px-4 py-3 flex items-center justify-between gap-2">
+            <div className="flex gap-1.5">
+              {index > 0 && (
+                <button
+                  onClick={onMoveUp}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors"
+                  title="Move up"
+                >
+                  ▲
+                </button>
+              )}
+              {index < totalQuestions - 1 && (
+                <button
+                  onClick={onMoveDown}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors"
+                  title="Move down"
+                >
+                  ▼
+                </button>
+              )}
+              <button
+                onClick={onDuplicate}
+                className="px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-white rounded transition-colors font-medium"
+                title="Duplicate this question"
+              >
+                📋 Duplicate
+              </button>
             </div>
-          )}
-        </div>
-
-        {/* Move / Remove */}
-        <div className="flex flex-col gap-1 shrink-0">
-          <button
-            onClick={onMoveUp}
-            disabled={!canMoveUp}
-            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-            title="Move up"
-          >
-            ↑
-          </button>
-          <button
-            onClick={onMoveDown}
-            disabled={!canMoveDown}
-            className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
-            title="Move down"
-          >
-            ↓
-          </button>
-          <button onClick={onRemove} className="p-1 text-red-400 hover:text-red-600" title="Remove">
-            🗑
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={onRemove}
+              className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors font-medium"
+            >
+              🗑️ Delete
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
