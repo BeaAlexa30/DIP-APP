@@ -319,16 +319,18 @@ export default function SectionEditor({
                                           }}
                                           onDrop={() => {
                                             if (!optDragIndex || optDragIndex.qId !== q.id || optDragIndex.idx === optIdx) return
+                                            // prevent dropping onto or after __other__
+                                            if (isOther) return
                                             const reordered = [...q.options]
                                             const [moved] = reordered.splice(optDragIndex.idx, 1)
                                             reordered.splice(optIdx, 0, moved)
+                                            // always keep __other__ at the end
+                                            const withoutOther = reordered.filter((o: any) => o.value_key !== '__other__')
+                                            const otherOpt = reordered.find((o: any) => o.value_key === '__other__')
+                                            const final = otherOpt ? [...withoutOther, otherOpt] : withoutOther
                                             onUpdateQuestion?.(section.id, q.id, {
-                                              options: reordered.map((o, i) => ({ ...o, order: i + 1 }))
+                                              options: final.map((o, i) => ({ ...o, order: i + 1 }))
                                             })
-                                            setOptDragIndex(null)
-                                            setOptDragOverIndex(null)
-                                          }}
-                                          onDragEnd={() => {
                                             setOptDragIndex(null)
                                             setOptDragOverIndex(null)
                                           }}
@@ -390,7 +392,24 @@ export default function SectionEditor({
                                 {/* Add Option and Add Other Buttons */}
                                 <div className="flex gap-2">
                                   <button
-                                    onClick={() => onAddOption?.(q.id)}
+                                    onClick={() => {
+                                      const hasOther = q.options?.some((o: any) => o.value_key === '__other__')
+                                      if (hasOther) {
+                                        const withoutOther = q.options.filter((o: any) => o.value_key !== '__other__')
+                                        const otherOpt = q.options.find((o: any) => o.value_key === '__other__')
+                                        const newOpt = {
+                                          id: `${q.id}-opt-${q.options.length}`,
+                                          label: `Option ${withoutOther.length + 1}`,
+                                          value_key: `option_${withoutOther.length + 1}`,
+                                          order: withoutOther.length + 1,
+                                        }
+                                        onUpdateQuestion?.(section.id, q.id, {
+                                          options: [...withoutOther, newOpt, otherOpt].map((o, i) => ({ ...o, order: i + 1 }))
+                                        } as any)
+                                      } else {
+                                        onAddOption?.(q.id)
+                                      }
+                                    }}
                                     className="flex-1 px-2 py-1.5 text-xs text-violet-600 hover:text-violet-700 font-medium border border-violet-200 rounded hover:bg-violet-50 transition-colors"
                                   >
                                     + Add Option
