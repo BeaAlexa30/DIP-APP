@@ -10,6 +10,17 @@
 import { useState, useRef, useEffect } from 'react'
 import { RichTextContent, TextMark } from '@/types/SurveyBuilder'
 
+// Inject placeholder style once
+if (typeof document !== 'undefined') {
+  const styleId = 'rte-placeholder-style'
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = `[contenteditable][data-placeholder]:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }`
+    document.head.appendChild(style)
+  }
+}
+
 interface RichTextEditorProps {
   value: string | RichTextContent | undefined
   onChange: (value: RichTextContent) => void
@@ -30,6 +41,7 @@ export default function RichTextEditor({
   name,
 }: RichTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const savedSelection = useRef<Range | null>(null)
   const [text, setText] = useState(
     !value
       ? ''
@@ -40,6 +52,9 @@ export default function RichTextEditor({
   const [marks, setMarks] = useState<TextMark[]>(
     !value || typeof value === 'string' ? [] : value.marks || []
   )
+
+  const [, forceUpdate] = useState(0)
+  const [activeMarks, setActiveMarks] = useState<Set<string>>(new Set())
 
   // Sync internal state when value prop changes (e.g., when dialog opens)
   useEffect(() => {
@@ -63,27 +78,21 @@ export default function RichTextEditor({
   }
 
   function applyMark(type: Exclude<TextMark['type'], 'link'>) {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    const { selectionStart, selectionEnd } = textarea
-    if (selectionStart === selectionEnd) {
-      return
+    const command = type === 'bold' ? 'bold' : type === 'italic' ? 'italic' : 'underline'
+    if (savedSelection.current) {
+      const sel = window.getSelection()
+      if (sel) {
+        sel.removeAllRanges()
+        sel.addRange(savedSelection.current)
+      }
     }
-
-    // Remove overlapping marks of same type
-    const newMarks = marks.filter(
-      m => !(m.type === type && m.start < selectionEnd && m.end > selectionStart)
-    )
-
-    newMarks.push({
-      type,
-      start: selectionStart,
-      end: selectionEnd,
-    })
-
-    setMarks(newMarks)
-    onChange({ text, marks: newMarks })
+    document.execCommand(command, false)
+    // Re-save selection after execCommand so it stays highlighted
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      savedSelection.current = sel.getRangeAt(0).cloneRange()
+    }
+    updateActiveMarks()
   }
 
   function clearFormatting() {
@@ -99,18 +108,16 @@ export default function RichTextEditor({
     onChange({ text, marks: newMarks })
   }
 
-  // Helper: check if mark type is applied to selection
+  function updateActiveMarks() {
+    const newActive = new Set<string>()
+    if (document.queryCommandState('bold')) newActive.add('bold')
+    if (document.queryCommandState('italic')) newActive.add('italic')
+    if (document.queryCommandState('underline')) newActive.add('underline')
+    setActiveMarks(newActive)
+  }
+
   function isMarkActive(type: TextMark['type']): boolean {
-    const textarea = textareaRef.current
-    if (!textarea) return false
-    const { selectionStart, selectionEnd } = textarea
-    return marks.some(
-      m =>
-        m.type === type &&
-        m.start <= selectionStart &&
-        m.end >= selectionEnd &&
-        selectionStart !== selectionEnd
-    )
+    return activeMarks.has(type)
   }
 
   return (
@@ -118,7 +125,7 @@ export default function RichTextEditor({
       {/* Toolbar */}
       <div className="flex flex-wrap gap-1 p-2 bg-gray-50 rounded-lg border border-gray-200">
         <button
-          onClick={() => applyMark('bold')}
+          onMouseDown={e => { e.preventDefault(); applyMark('bold') }}
           className={`px-3 py-1.5 text-sm font-bold rounded transition-colors ${
             isMarkActive('bold')
               ? 'bg-violet-600 text-white'
@@ -130,7 +137,7 @@ export default function RichTextEditor({
         </button>
 
         <button
-          onClick={() => applyMark('italic')}
+          onMouseDown={e => { e.preventDefault(); applyMark('italic') }}
           className={`px-3 py-1.5 text-sm italic rounded transition-colors ${
             isMarkActive('italic')
               ? 'bg-violet-600 text-white'
@@ -142,7 +149,7 @@ export default function RichTextEditor({
         </button>
 
         <button
-          onClick={() => applyMark('underline')}
+          onMouseDown={e => { e.preventDefault(); applyMark('underline') }}
           className={`px-3 py-1.5 text-sm underline rounded transition-colors ${
             isMarkActive('underline')
               ? 'bg-violet-600 text-white'
@@ -152,60 +159,50 @@ export default function RichTextEditor({
         >
           U
         </button>
-
-        <div className="border-l border-gray-300" />
-
-        <button
-          onClick={clearFormatting}
-          className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 border border-gray-300 rounded transition-colors"
-          title="Clear all formatting"
-        >
-          ✕ Clear
-        </button>
       </div>
 
       {/* Textarea */}
       <div className="relative">
-        <textarea
-          id={id}
-          name={name}
-          ref={textareaRef}
-          value={text}
-          onChange={e => handleTextChange(e.target.value)}
-          placeholder={placeholder}
-          rows={rows}
-          className={`w-full px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none font-mono ${className}`}
+        <div
+          className={`w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 min-h-[${rows * 2}rem] bg-white ${className}`}
+          contentEditable
+          suppressContentEditableWarning
+          data-placeholder={placeholder}
+          onInput={e => {
+            const el = e.currentTarget
+            handleTextChange(el.innerText)
+          }}
+          onSelect={() => {
+            const sel = window.getSelection()
+            if (sel && sel.rangeCount > 0) savedSelection.current = sel.getRangeAt(0).cloneRange()
+            updateActiveMarks()
+          }}
+          onKeyUp={() => {
+            const sel = window.getSelection()
+            if (sel && sel.rangeCount > 0) savedSelection.current = sel.getRangeAt(0).cloneRange()
+            updateActiveMarks()
+          }}
+          onMouseUp={() => {
+            const sel = window.getSelection()
+            if (sel && sel.rangeCount > 0) savedSelection.current = sel.getRangeAt(0).cloneRange()
+            updateActiveMarks()
+          }}
+          style={{
+            minHeight: `${rows * 1.8}rem`,
+          }}
+          ref={el => {
+            if (el && el.innerText !== text && document.activeElement !== el) {
+              el.innerText = text
+            }
+          }}
+          onKeyDown={e => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); applyMark('bold') }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); applyMark('italic') }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'u') { e.preventDefault(); applyMark('underline') }
+          }}
         />
       </div>
 
-      {/* Formatting Preview */}
-      {marks.length > 0 && (
-        <div className="text-xs text-gray-500 space-y-1">
-          <p className="font-semibold">Applied formatting:</p>
-          {marks.map((mark, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200"
-            >
-              <span>
-                <strong className="text-gray-700">
-                  {mark.type === 'link' ? '🔗' : mark.type === 'bold' ? 'B' : mark.type === 'italic' ? 'I' : 'U'}
-                </strong>
-                {': '}
-                {text.substring(mark.start, Math.min(mark.end, mark.start + 30))}
-                {mark.end - mark.start > 30 ? '...' : ''}
-                {mark.type === 'link' && ` → ${mark.url}`}
-              </span>
-              <button
-                onClick={() => removeMarkAtRange(mark.type, mark.start, mark.end)}
-                className="text-red-600 hover:text-red-700 text-xs font-medium"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
