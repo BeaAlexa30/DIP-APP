@@ -289,8 +289,8 @@ export default function SurveyFlow({
                     <div className="shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-sm font-semibold">
                       {qIndex + 1}
                     </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 leading-snug mb-5">
+                    <div className="flex-1 w-9/12 sm:w-10/12">
+                      <h3 className="text-lg font-semibold text-gray-900 leading-snug mb-5 break-words">
                         {question.prompt}
                         {question.required && <span className="text-red-400 ml-1">*</span>}
                       </h3>
@@ -510,7 +510,7 @@ export default function SurveyFlow({
               ))}
 
               {error && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl">
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl ">
                   {error}
                 </p>
               )}

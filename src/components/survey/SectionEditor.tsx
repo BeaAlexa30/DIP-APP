@@ -288,7 +288,7 @@ export default function SectionEditor({
                                           className={`flex-1 px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1 ${
                                             isOther
                                               ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
-                                              : 'border-violet-100 focus:ring-violet-400 bg-white'
+                                              : 'border-violet-100 focus:ring-violet-400 bg-white w-3/12'
                                           }`}
                                         />
                                         {!isOther && (
