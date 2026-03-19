@@ -309,7 +309,7 @@ export default function SurveyFlow({
                                 {isOther ? (
                                   <Button
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl h-auto text-sm sm:text-base border-2 sm:border whitespace-normal text-left"
+                                    className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl h-auto text-sm sm:text-base border sm:border-2 whitespace-normal text-left"
                                     onClick={() => {
                                       if (!isSelected) handleAnswer(question.id, '__other__:')
                                     }}
@@ -334,7 +334,7 @@ export default function SurveyFlow({
                                   <Button
                                     onClick={() => handleAnswer(question.id, opt.value_key)}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border-2 sm:border h-auto whitespace-normal text-left"
+                                    className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace-normal text-left"
                                   >
                                     {opt.label}
                                   </Button>
@@ -364,7 +364,7 @@ export default function SurveyFlow({
                                   <Button
                                     variant={isSelected ? 'default' : 'outline'}
                                     disabled={!isSelected && !!maxReached}
-                                    className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl h-auto text-sm sm:text-base border-2 sm:border whitespace-normal text-left"
+                                    className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl h-auto text-sm sm:text-base border sm:border-2 whitespace-normal text-left"
                                     onClick={() => {
                                       if (!isSelected && maxReached) return
                                       if (!isSelected) {
@@ -408,7 +408,7 @@ export default function SurveyFlow({
                                     }}
                                     disabled={!isSelected && !!maxReached}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border-2 sm:border h-auto whitespace-normal text-left"
+                                    className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace-normal text-left"
                                   >
                                     {opt.label}
                                   </Button>
@@ -498,7 +498,7 @@ export default function SurveyFlow({
                       {question.type === 'yes_no' && (
                         <div className="space-y-3 sm:space-y-4">
                           {['Yes', 'No'].map(opt => (
-                            <Button key={opt.toLowerCase()} onClick={() => handleAnswer(question.id, opt.toLowerCase())} variant={answers[question.id] === opt.toLowerCase() ? 'default' : 'outline'} className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm border-2 sm:border h-auto text-left">
+                            <Button key={opt.toLowerCase()} onClick={() => handleAnswer(question.id, opt.toLowerCase())} variant={answers[question.id] === opt.toLowerCase() ? 'default' : 'outline'} className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm border sm:border-2 h-auto text-left">
                               {opt}
                             </Button>
                           ))}
