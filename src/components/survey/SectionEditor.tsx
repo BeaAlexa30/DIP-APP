@@ -60,6 +60,10 @@ export default function SectionEditor({
   const [showAddButton, setShowAddButton] = useState(false)
   const [buttonLabel, setButtonLabel] = useState('')
   const [buttonTarget, setButtonTarget] = useState('')
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [optDragIndex, setOptDragIndex] = useState<{ qId: string; idx: number } | null>(null)
+  const [optDragOverIndex, setOptDragOverIndex] = useState<number | null>(null)
 
   function handleAddSectionButton() {
     if (!buttonLabel.trim() || !buttonTarget) return
@@ -160,33 +164,74 @@ export default function SectionEditor({
                   {section.questions.map((q: any, idx: number) => {
                     const isQuestionExpanded = expandedQuestionId === q.id
                     return (
-                      <div key={q.id}>
-                        <button
-                          onClick={() => {
-                            if (isQuestionExpanded) {
-                              onExpandQuestion?.(null)
-                            } else {
-                              onExpandQuestion?.(q.id)
-                            }
-                          }}
-                          className={`w-full flex items-start justify-between gap-2 p-2 rounded border transition-all ${
-                            isQuestionExpanded
-                              ? 'bg-violet-100 border-violet-300'
-                              : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50'
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0 text-left">
-                            <p className="text-xs font-medium text-gray-900 line-clamp-2">
-                              {typeof q.prompt === 'string' ? q.prompt : q.prompt?.text || '(untitled)'}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {q.type} {q.required && '• Required'}
-                            </p>
+                      <div
+                        key={q.id}
+                        draggable={false}
+                        onDragStart={() => setDragIndex(idx)}
+                        onDragOver={e => {
+                          e.preventDefault()
+                          setDragOverIndex(idx)
+                        }}
+                        onDrop={() => {
+                          if (dragIndex === null || dragIndex === idx) return
+                          const reordered = [...section.questions]
+                          const [moved] = reordered.splice(dragIndex, 1)
+                          reordered.splice(idx, 0, moved)
+                          onUpdate({ questions: reordered.map((q, i) => ({ ...q, order: i + 1 })) })
+                          setDragIndex(null)
+                          setDragOverIndex(null)
+                        }}
+                        onDragEnd={() => {
+                          setDragIndex(null)
+                          setDragOverIndex(null)
+                        }}
+                        className={`rounded border transition-all ${
+                          dragOverIndex === idx && dragIndex !== idx
+                            ? 'border-violet-400 bg-violet-50'
+                            : 'border-transparent'
+                        }`}
+                      >
+                        {/* Drag handle + collapse toggle row */}
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-5 h-5 bg-gray-300 rounded shrink-0 cursor-grab active:cursor-grabbing ml-2 mt-1 flex items-center justify-center"
+                            title="Drag to reorder"
+                            onMouseDown={e => {
+                              // make parent draggable only when handle is grabbed
+                              const parent = e.currentTarget.closest('[draggable]') as HTMLElement
+                              if (parent) parent.draggable = true
+                            }}
+                          >
+                            ⠿
                           </div>
-                          <span className={`text-gray-400 shrink-0 text-lg transition-transform ${isQuestionExpanded ? 'rotate-180' : ''}`}>
-                            ▼
-                          </span>
-                        </button>
+                          <button
+                          onDragStart={e => e.preventDefault()}
+                            onClick={() => {
+                              if (isQuestionExpanded) {
+                                onExpandQuestion?.(null)
+                              } else {
+                                onExpandQuestion?.(q.id)
+                              }
+                            }}
+                            className={`flex-1 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
+                              isQuestionExpanded
+                                ? 'bg-violet-100 border-violet-300'
+                                : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50'
+                            }`}
+                          >
+                            <div className="flex-1 min-w-0 text-left">
+                              <p className="text-xs font-medium text-gray-900 line-clamp-2">
+                                {typeof q.prompt === 'string' ? q.prompt : q.prompt?.text || '(untitled)'}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {q.type} {q.required && '• Required'}
+                              </p>
+                            </div>
+                            <span className={`text-gray-400 shrink-0 text-lg transition-transform ${isQuestionExpanded ? 'rotate-180' : ''}`}>
+                              ▼
+                            </span>
+                          </button>
+                        </div>
 
                         {/* Expanded Question Editor */}
                         {isQuestionExpanded && (
@@ -264,11 +309,51 @@ export default function SectionEditor({
                                   {q.options.map((opt: any, optIdx: number) => {
                                     const isOther = opt.value_key === '__other__'
                                     return (
-                                      <div key={opt.id} className={`flex items-center gap-2 p-2 rounded border ${
-                                        isOther 
-                                          ? 'bg-blue-50 border-blue-200' 
-                                          : 'bg-white border-violet-100'
-                                      }`}>
+                                      <div
+                                          key={opt.id}
+                                          draggable={!isOther}
+                                          onDragStart={() => setOptDragIndex({ qId: q.id, idx: optIdx })}
+                                          onDragOver={e => {
+                                            e.preventDefault()
+                                            setOptDragOverIndex(optIdx)
+                                          }}
+                                          onDrop={() => {
+                                            if (!optDragIndex || optDragIndex.qId !== q.id || optDragIndex.idx === optIdx) return
+                                            // prevent dropping onto or after __other__
+                                            if (isOther) return
+                                            const reordered = [...q.options]
+                                            const [moved] = reordered.splice(optDragIndex.idx, 1)
+                                            reordered.splice(optIdx, 0, moved)
+                                            // always keep __other__ at the end
+                                            const withoutOther = reordered.filter((o: any) => o.value_key !== '__other__')
+                                            const otherOpt = reordered.find((o: any) => o.value_key === '__other__')
+                                            const final = otherOpt ? [...withoutOther, otherOpt] : withoutOther
+                                            onUpdateQuestion?.(section.id, q.id, {
+                                              options: final.map((o, i) => ({ ...o, order: i + 1 }))
+                                            })
+                                            setOptDragIndex(null)
+                                            setOptDragOverIndex(null)
+                                          }}
+                                          className={`flex items-center gap-2 p-2 rounded border transition-all ${
+                                            optDragOverIndex === optIdx && optDragIndex?.idx !== optIdx && optDragIndex?.qId === q.id
+                                              ? 'border-violet-400 bg-violet-50'
+                                              : isOther
+                                                ? 'bg-blue-50 border-blue-200'
+                                                : 'bg-white border-violet-100'
+                                          }`}
+                                        >
+                                          {!isOther && (
+                                            <div
+                                              className="w-4 h-4 bg-gray-200 rounded shrink-0 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-400"
+                                              onDragStart={e => e.stopPropagation()}
+                                              onMouseDown={e => {
+                                                const parent = e.currentTarget.closest('[draggable]') as HTMLElement
+                                                if (parent) parent.draggable = true
+                                              }}
+                                            >
+                                              ⠿
+                                            </div>
+                                          )}
                                         <input
                                           type="text"
                                           value={opt.label}
@@ -291,30 +376,7 @@ export default function SectionEditor({
                                               : 'border-violet-100 focus:ring-violet-400 bg-white w-3/12'
                                           }`}
                                         />
-                                        {!isOther && (
-                                          <>
-                                            <button
-                                              onClick={() => {
-                                                if (optIdx > 0) onMoveOptionUp?.(q.id, optIdx)
-                                              }}
-                                              disabled={optIdx === 0}
-                                              className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 disabled:text-gray-300 transition-colors"
-                                              title="Move up"
-                                            >
-                                              ▲
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                if (optIdx < q.options.length - 1) onMoveOptionDown?.(q.id, optIdx)
-                                              }}
-                                              disabled={optIdx === q.options.length - 1}
-                                              className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 disabled:text-gray-300 transition-colors"
-                                              title="Move down"
-                                            >
-                                              ▼
-                                            </button>
-                                          </>
-                                        )}
+                                        
                                         <button
                                           onClick={() => onRemoveOption?.(q.id, opt.id)}
                                           className="px-2 py-1 text-xs text-red-600 hover:text-red-700 transition-colors"
@@ -330,7 +392,24 @@ export default function SectionEditor({
                                 {/* Add Option and Add Other Buttons */}
                                 <div className="flex gap-2">
                                   <button
-                                    onClick={() => onAddOption?.(q.id)}
+                                    onClick={() => {
+                                      const hasOther = q.options?.some((o: any) => o.value_key === '__other__')
+                                      if (hasOther) {
+                                        const withoutOther = q.options.filter((o: any) => o.value_key !== '__other__')
+                                        const otherOpt = q.options.find((o: any) => o.value_key === '__other__')
+                                        const newOpt = {
+                                          id: `${q.id}-opt-${q.options.length}`,
+                                          label: `Option ${withoutOther.length + 1}`,
+                                          value_key: `option_${withoutOther.length + 1}`,
+                                          order: withoutOther.length + 1,
+                                        }
+                                        onUpdateQuestion?.(section.id, q.id, {
+                                          options: [...withoutOther, newOpt, otherOpt].map((o, i) => ({ ...o, order: i + 1 }))
+                                        } as any)
+                                      } else {
+                                        onAddOption?.(q.id)
+                                      }
+                                    }}
                                     className="flex-1 px-2 py-1.5 text-xs text-violet-600 hover:text-violet-700 font-medium border border-violet-200 rounded hover:bg-violet-50 transition-colors"
                                   >
                                     + Add Option
