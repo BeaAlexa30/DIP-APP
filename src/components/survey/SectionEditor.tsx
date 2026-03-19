@@ -160,7 +160,7 @@ export default function SectionEditor({
                 <p className="text-xs font-semibold text-gray-700 mb-2">
                   Questions ({section.questions.length})
                 </p>
-                <div className="space-y-2 bg-white rounded-lg border border-blue-100 p-3">
+                <div className="space-y-2 bg-white rounded-lg border border-blue-100 p-3 ">
                   {section.questions.map((q: any, idx: number) => {
                     const isQuestionExpanded = expandedQuestionId === q.id
                     return (
@@ -192,7 +192,7 @@ export default function SectionEditor({
                         }`}
                       >
                         {/* Drag handle + collapse toggle row */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 w-full">
                           <div
                             className="w-5 h-5 bg-gray-300 rounded shrink-0 cursor-grab active:cursor-grabbing ml-2 mt-1 flex items-center justify-center"
                             title="Drag to reorder"
@@ -216,11 +216,11 @@ export default function SectionEditor({
                             className={`flex-1 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
                               isQuestionExpanded
                                 ? 'bg-violet-100 border-violet-300'
-                                : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50'
+                                : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50 w-10/12'
                             }`}
                           >
-                            <div className="flex-1 min-w-0 text-left">
-                              <p className="text-xs font-medium text-gray-900 line-clamp-2">
+                            <div className="flex-1 min-w-0 text-left ">
+                              <p className="text-xs font-medium text-gray-900 line-clamp-2 break-words w-full ">
                                 {typeof q.prompt === 'string' ? q.prompt : q.prompt?.text || '(untitled)'}
                               </p>
                               <p className="text-xs text-gray-500 mt-0.5">
