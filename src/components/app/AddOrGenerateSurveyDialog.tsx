@@ -255,24 +255,38 @@ export default function AddOrGenerateSurveyDialog({
   }
 
   // ── Custom Survey Functions ────────────────────────────────────────────────
-  function addNewQuestion(type: QuestionType) {
-    // Add to the first section, or create one if needed
-    const targetSection = customSections.length > 0 ? customSections[0] : null
+  function addNewQuestion(sectionId: string, type: QuestionType) {
+    // Add to the specified section
+    const targetSection = customSections.find(s => s.id === sectionId)
     if (!targetSection) {
-      addNewSection()
+      // If section doesn't exist, create one and add the question
+      const newSection: SurveyCategory = {
+        id: `sec-${Date.now()}`,
+        name: `Section ${customSections.length + 1}`,
+        description: undefined,
+        order: customSections.length + 1,
+        questions: [],
+        sectionButtons: [],
+        collapsedByDefault: false,
+      }
+      const newQuestion = createQuestion(type)
+      newSection.questions = [newQuestion]
+      setCustomSections(prev => [...prev, newSection])
+      setExpandedQuestionId(newQuestion.id)
+      setExpandedSectionId(newSection.id)
       return
     }
     
     const newQuestion = createQuestion(type)
     setCustomSections(prev =>
       prev.map(s =>
-        s.id === targetSection.id
+        s.id === sectionId
           ? { ...s, questions: [...(s.questions || []), newQuestion] }
           : s
       )
     )
     setExpandedQuestionId(newQuestion.id)
-    setExpandedSectionId(targetSection.id)
+    setExpandedSectionId(sectionId)
   }
 
   function removeQuestion(id: string) {
@@ -1191,7 +1205,7 @@ interface CustomSurveyTabProps {
   customSuccess: boolean
   onTitleChange: (value: string) => void
   onDescriptionChange: (value: RichTextContent) => void
-  onAddQuestion: (type: QuestionType) => void
+  onAddQuestion: (sectionId: string, type: QuestionType) => void
   onRemoveQuestion: (id: string) => void
   onDuplicateQuestion: (id: string) => void
   onMoveUp: (index: number) => void
@@ -1371,7 +1385,7 @@ function CustomSurveyTab({
               onMoveDown={() => onMoveSectionDown(index)}
               canMoveUp={index > 0}
               canMoveDown={index < customSections.length - 1}
-              onAddQuestion={(sectionId, type) => onAddQuestion(type as QuestionType)}
+              onAddQuestion={(sectionId, type) => onAddQuestion(sectionId, type as QuestionType)}
               onRemoveQuestion={(sectionId, qId) => onRemoveQuestion(qId)}
               onUpdateQuestion={(sectionId, qId, updates) => onUpdateQuestion(qId, updates)}
               onAddOption={onAddOption}
