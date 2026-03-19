@@ -586,36 +586,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                     + Add Section
                   </button>
 
-                  {/* Add Question */}
-                  <div className="border-t border-gray-100 pt-4">
-                    <label htmlFor="add-question-select" className="block text-xs font-semibold text-gray-600 mb-2">
-                      Add Question to First Section:
-                    </label>
-                    <select
-                      id="add-question-select"
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          addNewQuestion(e.target.value as QuestionType)
-                          e.target.value = ''
-                        }
-                      }}
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
-                    >
-                      <option value="">Select a question type...</option>
-                      <option value="short_text">📝 Short Text</option>
-                      <option value="long_text">📄 Long Text (Paragraph)</option>
-                      <option value="multiple_choice">⭕ Multiple Choice</option>
-                      <option value="checkboxes">☑️ Checkboxes</option>
-                      <option value="dropdown">🔽 Dropdown</option>
-                      <option value="linear_scale">📊 Linear Scale</option>
-                      <option value="yes_no">✓✗ Yes/No</option>
-                      <option value="email">✉️ Email</option>
-                      <option value="url">🔗 URL</option>
-                      <option value="date">📅 Date</option>
-                      <option value="time">🕐 Time</option>
-                      <option value="number">🔢 Number</option>
-                    </select>
-                  </div>
+                  
 
                   {error && (
                     <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 whitespace-pre-wrap">
