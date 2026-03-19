@@ -230,19 +230,19 @@ export default function SurveyFlow({
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-3 sm:px-6 py-4">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-sm font-medium text-gray-700">{snapshot.packName}</p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 gap-2">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-gray-700 truncate">{snapshot.packName}</p>
               <p className="text-xs text-gray-400">Section {currentSectionIndex + 1} of {sortedCategories.length}</p>
             </div>
-            <p className="text-xs text-gray-400">{Math.round(progress)}% complete</p>
+            <p className="text-xs text-gray-400 whitespace-nowrap">{Math.round(progress)}% complete</p>
           </div>
           
           {/* Form description - shown on first section */}
           {currentSectionIndex === 0 && snapshot.description && (
-            <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 whitespace-pre-wrap">
+            <div className="mb-3 p-2 sm:p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 whitespace-pre-wrap overflow-x-auto">
               {renderRichText(snapshot.description)}
             </div>
           )}
@@ -259,19 +259,19 @@ export default function SurveyFlow({
       </div>
 
       {/* Questions Section */}
-      <div className="flex-1 flex items-start justify-center px-6 py-10">
+      <div className="flex-1 flex items-start justify-center px-3 sm:px-6 py-6 sm:py-10 w-full overflow-x-hidden">
         <div className="w-full max-w-3xl">
           {currentSection && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Section Header */}
-              <div className={`${sectionColors[currentSectionIndex % sectionColors.length]} rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8`}>
+              <div className={`${sectionColors[currentSectionIndex % sectionColors.length]} rounded-xl sm:rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-6 md:p-8`}>
                 <p className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 bg-gray-200 px-2 py-1 rounded inline-block w-fit">
                   {currentSection.name}
                 </p>
                 
                 {/* Section description */}
                 {currentSection.description && (
-                  <div className="mb-4 p-4 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-800 whitespace-pre-wrap font-medium">
+                  <div className="mb-4 p-3 sm:p-4 bg-gray-100 border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-800 whitespace-pre-wrap font-medium overflow-x-auto">
                     {renderRichText(currentSection.description)}
                   </div>
                 )}
@@ -283,21 +283,21 @@ export default function SurveyFlow({
 
               {/* All questions in section */}
               {currentSectionQuestions.map((question, qIndex) => (
-                <div key={question.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8">
+                <div key={question.id} className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 shadow-sm p-4 sm:p-6 md:p-8">
                   {/* Question number and prompt */}
-                  <div className="flex gap-4">
-                    <div className="shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-sm font-semibold">
+                  <div className="flex gap-3 sm:gap-4">
+                    <div className="shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold">
                       {qIndex + 1}
                     </div>
-                    <div className="flex-1 w-9/12 sm:w-10/12">
-                      <h3 className="text-lg font-semibold text-gray-900 leading-snug mb-5 break-words">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 leading-snug mb-4 sm:mb-5 break-words">
                         {question.prompt}
                         {question.required && <span className="text-red-400 ml-1">*</span>}
                       </h3>
 
                       {/* Render question type */}
                       {(question.type === 'single_select' || question.type === 'radio' || question.type === 'multiple_choice') && (
-                        <div className="space-y-2">
+                        <div className="space-y-3 sm:space-y-4">
                           {question.options.sort((a, b) => a.order - b.order).map(opt => {
                             const isOther = opt.value_key === '__other__'
                             const isSelected = isOther
@@ -309,12 +309,12 @@ export default function SurveyFlow({
                                 {isOther ? (
                                   <Button
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-4 py-2 rounded-xl h-auto"
+                                    className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl h-auto text-sm sm:text-base border-2 sm:border whitespace-normal text-left"
                                     onClick={() => {
                                       if (!isSelected) handleAnswer(question.id, '__other__:')
                                     }}
                                   >
-                                    <span className="shrink-0 text-sm font-medium">Other:</span>
+                                    <span className="text-sm font-medium">Other:</span>
                                     <input
                                       type="text"
                                       value={answers[question.id]?.startsWith('__other__:') ? answers[question.id].replace('__other__:', '') : ''}
@@ -327,14 +327,14 @@ export default function SurveyFlow({
                                       }}
                                       onClick={e => e.stopPropagation()}
                                       placeholder="Please specify..."
-                                      className={`flex-1 text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
+                                      className={`flex-1 text-xs sm:text-sm focus:outline-none bg-transparent ml-2 ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
                                     />
                                   </Button>
                                 ) : (
                                   <Button
                                     onClick={() => handleAnswer(question.id, opt.value_key)}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
+                                    className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border-2 sm:border h-auto whitespace-normal text-left"
                                   >
                                     {opt.label}
                                   </Button>
@@ -347,7 +347,7 @@ export default function SurveyFlow({
 
                       {/* Checkboxes */}
                       {(question.type === 'checkbox' || question.type === 'checkboxes') && (
-                        <div className="space-y-2">
+                        <div className="space-y-3 sm:space-y-4">
                           {question.options.sort((a, b) => a.order - b.order).map(opt => {
                             const currentAnswers = answers[question.id]?.split(',').filter(Boolean) || []
                             const isOther = opt.value_key === '__other__'
@@ -364,7 +364,7 @@ export default function SurveyFlow({
                                   <Button
                                     variant={isSelected ? 'default' : 'outline'}
                                     disabled={!isSelected && !!maxReached}
-                                    className="w-full justify-start px-4 py-2 rounded-xl h-auto"
+                                    className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl h-auto text-sm sm:text-base border-2 sm:border whitespace-normal text-left"
                                     onClick={() => {
                                       if (!isSelected && maxReached) return
                                       if (!isSelected) {
@@ -376,7 +376,7 @@ export default function SurveyFlow({
                                       }
                                     }}
                                   >
-                                    <span className="shrink-0 text-sm font-medium">Other:</span>
+                                    <span className="text-sm font-medium">Other:</span>
                                     <input
                                       type="text"
                                       value={currentAnswers.find(a => a.startsWith('__other__:'))?.replace('__other__:', '') ?? ''}
@@ -394,7 +394,7 @@ export default function SurveyFlow({
                                       }}
                                       onClick={e => e.stopPropagation()}
                                       placeholder="Please specify..."
-                                      className={`flex-1 text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
+                                      className={`flex-1 text-xs sm:text-sm focus:outline-none bg-transparent ml-2 ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
                                     />
                                   </Button>
                                 ) : (
@@ -408,7 +408,7 @@ export default function SurveyFlow({
                                     }}
                                     disabled={!isSelected && !!maxReached}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
+                                    className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border-2 sm:border h-auto whitespace-normal text-left"
                                   >
                                     {opt.label}
                                   </Button>
@@ -436,7 +436,7 @@ export default function SurveyFlow({
                         <select
                           value={answers[question.id] ?? ''}
                           onChange={e => handleAnswer(question.id, e.target.value)}
-                          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                         >
                           <option value="">Select an option...</option>
                           {question.options.sort((a, b) => a.order - b.order).map(opt => (
@@ -453,13 +453,13 @@ export default function SurveyFlow({
                         let gridClass = scaleValues.length <= 5 ? 'grid-cols-5' : 'grid-cols-6 sm:grid-cols-11'
                         return (
                           <div>
-                            <div className={`grid ${gridClass} gap-2`}>
+                            <div className={`grid ${gridClass} gap-1 sm:gap-2`}>
                               {scaleValues.map(num => (
                                 <Button
                                   key={num}
                                   onClick={() => handleAnswer(question.id, num.toString())}
                                   variant={answers[question.id] === num.toString() ? 'default' : 'outline'}
-                                  className="aspect-square flex items-center justify-center rounded-lg text-sm font-semibold"
+                                  className="aspect-square flex items-center justify-center rounded-lg text-xs sm:text-sm font-semibold p-1 sm:p-2"
                                 >
                                   {num}
                                 </Button>
@@ -475,30 +475,30 @@ export default function SurveyFlow({
 
                       {/* Text inputs */}
                       {(question.type === 'text' || question.type === 'textarea' || question.type === 'long_text') && (
-                        <textarea rows={4} value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Type your answer…" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                        <textarea rows={4} value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Type your answer…" className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                       )}
                       {question.type === 'short_text' && (
-                        <input type="text" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Type your answer…" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="text" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Type your answer…" className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       )}
                       {question.type === 'email' && (
-                        <input type="email" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="email@example.com" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="email" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="email@example.com" className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       )}
                       {question.type === 'url' && (
-                        <input type="url" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="https://example.com" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="url" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="https://example.com" className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       )}
                       {question.type === 'date' && (
-                        <input type="date" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="date" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       )}
                       {question.type === 'time' && (
-                        <input type="time" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="time" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       )}
                       {question.type === 'number' && (
-                        <input type="number" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Enter a number…" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <input type="number" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Enter a number…" className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-200 rounded-lg sm:rounded-xl text-xs sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       )}
                       {question.type === 'yes_no' && (
-                        <div className="space-y-2">
+                        <div className="space-y-3 sm:space-y-4">
                           {['Yes', 'No'].map(opt => (
-                            <Button key={opt.toLowerCase()} onClick={() => handleAnswer(question.id, opt.toLowerCase())} variant={answers[question.id] === opt.toLowerCase() ? 'default' : 'outline'} className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm">
+                            <Button key={opt.toLowerCase()} onClick={() => handleAnswer(question.id, opt.toLowerCase())} variant={answers[question.id] === opt.toLowerCase() ? 'default' : 'outline'} className="w-full justify-start px-4 sm:px-5 py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm border-2 sm:border h-auto text-left">
                               {opt}
                             </Button>
                           ))}
@@ -518,19 +518,19 @@ export default function SurveyFlow({
           )}
 
           {/* Navigation */}
-          <div className="bg-white border-t border-gray-200 px-6 py-4 mt-6 rounded-3xl shadow-md">
-            <div className="max-w-3xl mx-auto flex gap-3">
+          <div className="bg-white border-t border-gray-200 px-3 sm:px-6 py-4 mt-6 rounded-2xl sm:rounded-3xl shadow-md">
+            <div className="max-w-3xl mx-auto flex gap-2 sm:gap-3">
               {currentSectionIndex > 0 && (
-                <Button variant={'outline'} onClick={handleBack}>
+                <Button variant={'outline'} onClick={handleBack} className="text-xs sm:text-sm">
                   ← Back
                 </Button>
               )}
               {currentSectionIndex < sortedCategories.length - 1 ? (
-                <Button onClick={handleNext} disabled={!canAdvanceSection} className="flex-1">
+                <Button onClick={handleNext} disabled={!canAdvanceSection} className="flex-1 text-xs sm:text-sm">
                   Next Section →
                 </Button>
               ) : (
-                <Button onClick={handleSubmit} disabled={submitting || !canAdvanceSection} className="flex-1">
+                <Button onClick={handleSubmit} disabled={submitting || !canAdvanceSection} className="flex-1 text-xs sm:text-sm">
                   {submitting ? 'Submitting…' : 'Submit Response'}
                 </Button>
               )}

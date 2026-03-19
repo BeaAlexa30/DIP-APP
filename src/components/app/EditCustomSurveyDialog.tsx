@@ -223,23 +223,37 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     })
   }
 
-  function addNewQuestion(type: QuestionType) {
-    const targetSection = sections.length > 0 ? sections[0] : null
+  function addNewQuestion(sectionId: string, type: QuestionType) {
+    const targetSection = sections.find(s => s.id === sectionId)
     if (!targetSection) {
-      addNewSection()
+      // If section doesn't exist, create one and add the question
+      const newSection: SurveyCategory = {
+        id: `sec-${Date.now()}`,
+        name: `Section ${sections.length + 1}`,
+        description: undefined,
+        order: sections.length + 1,
+        questions: [],
+        sectionButtons: [],
+        collapsedByDefault: false,
+      }
+      const newQuestion = createQuestion(type)
+      newSection.questions = [newQuestion]
+      setSections(prev => [...prev, newSection])
+      setExpandedQuestionId(newQuestion.id)
+      setExpandedSectionId(newSection.id)
       return
     }
     
     const newQuestion = createQuestion(type)
     setSections(prev =>
       prev.map(s =>
-        s.id === targetSection.id
+        s.id === sectionId
           ? { ...s, questions: [...(s.questions || []), newQuestion] }
           : s
       )
     )
     setExpandedQuestionId(newQuestion.id)
-    setExpandedSectionId(targetSection.id)
+    setExpandedSectionId(sectionId)
   }
 
   function removeQuestion(id: string) {
@@ -563,7 +577,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                           onMoveDown={() => moveSectionDown(index)}
                           canMoveUp={index > 0}
                           canMoveDown={index < sections.length - 1}
-                          onAddQuestion={(sectionId, type) => addNewQuestion(type as QuestionType)}
+                          onAddQuestion={(sectionId, type) => addNewQuestion(sectionId, type as QuestionType)}
                           onRemoveQuestion={(sectionId, qId) => removeQuestion(qId)}
                           onUpdateQuestion={(sectionId, qId, updates) => updateQuestion(qId, updates)}
                           onAddOption={addOptionToQuestion}
