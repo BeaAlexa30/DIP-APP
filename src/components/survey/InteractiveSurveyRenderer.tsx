@@ -309,12 +309,12 @@ export default function SurveyFlow({
                                 {isOther ? (
                                   <Button
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl h-auto text-sm sm:text-base border sm:border-2 whitespace-normal text-left"
+                                    className="w-full flex flex-wrap items-center gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl h-auto text-xs sm:text-sm border sm:border-2 text-left"
                                     onClick={() => {
                                       if (!isSelected) handleAnswer(question.id, '__other__:')
                                     }}
                                   >
-                                    <span className="text-sm font-medium">Other:</span>
+                                    <span className="font-medium whitespace-nowrap">Other:</span>
                                     <input
                                       type="text"
                                       value={answers[question.id]?.startsWith('__other__:') ? answers[question.id].replace('__other__:', '') : ''}
@@ -327,14 +327,14 @@ export default function SurveyFlow({
                                       }}
                                       onClick={e => e.stopPropagation()}
                                       placeholder="Please specify..."
-                                      className={`flex-1 text-xs sm:text-sm focus:outline-none bg-transparent ml-2 ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
+                                      className={`flex-1 min-w-[100px] text-xs sm:text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
                                     />
                                   </Button>
                                 ) : (
                                   <Button
                                     onClick={() => handleAnswer(question.id, opt.value_key)}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace-normal text-left"
+                                    className="w-full justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace-normal text-left"
                                   >
                                     {opt.label}
                                   </Button>
@@ -364,7 +364,7 @@ export default function SurveyFlow({
                                   <Button
                                     variant={isSelected ? 'default' : 'outline'}
                                     disabled={!isSelected && !!maxReached}
-                                    className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl h-auto text-sm sm:text-base border sm:border-2 whitespace-normal text-left"
+                                    className="w-full flex flex-wrap items-center gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl h-auto text-xs sm:text-sm border sm:border-2 text-left"
                                     onClick={() => {
                                       if (!isSelected && maxReached) return
                                       if (!isSelected) {
@@ -376,7 +376,7 @@ export default function SurveyFlow({
                                       }
                                     }}
                                   >
-                                    <span className="text-sm font-medium">Other:</span>
+                                    <span className="font-medium whitespace-nowrap">Other:</span>
                                     <input
                                       type="text"
                                       value={currentAnswers.find(a => a.startsWith('__other__:'))?.replace('__other__:', '') ?? ''}
@@ -394,7 +394,7 @@ export default function SurveyFlow({
                                       }}
                                       onClick={e => e.stopPropagation()}
                                       placeholder="Please specify..."
-                                      className={`flex-1 text-xs sm:text-sm focus:outline-none bg-transparent ml-2 ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
+                                      className={`flex-1 min-w-[100px] text-xs sm:text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
                                     />
                                   </Button>
                                 ) : (
@@ -408,7 +408,7 @@ export default function SurveyFlow({
                                     }}
                                     disabled={!isSelected && !!maxReached}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace-normal text-left"
+                                    className="w-full justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace-normal text-left"
                                   >
                                     {opt.label}
                                   </Button>
@@ -498,7 +498,7 @@ export default function SurveyFlow({
                       {question.type === 'yes_no' && (
                         <div className="space-y-3 sm:space-y-4">
                           {['Yes', 'No'].map(opt => (
-                            <Button key={opt.toLowerCase()} onClick={() => handleAnswer(question.id, opt.toLowerCase())} variant={answers[question.id] === opt.toLowerCase() ? 'default' : 'outline'} className="w-full justify-start px-2 sm:px-4 sm:px-5 py-2 sm:py-3 sm:py-4 rounded-lg sm:rounded-xl text-xs sm:text-sm border sm:border-2 h-auto text-left">
+                            <Button key={opt.toLowerCase()} onClick={() => handleAnswer(question.id, opt.toLowerCase())} variant={answers[question.id] === opt.toLowerCase() ? 'default' : 'outline'} className="w-full justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm border sm:border-2 h-auto text-left">
                               {opt}
                             </Button>
                           ))}
