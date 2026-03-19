@@ -8,8 +8,9 @@ interface Question {
   id: string; type: string; prompt: string; required: boolean; order: number; options: Option[]
   scaleMin?: number; scaleMax?: number; minLabel?: string; maxLabel?: string
 }
-interface Category { id: string; name: string; order: number; questions: Question[] }
-interface Snapshot { packName: string; version: string; categories: Category[]; ai_generated?: boolean }
+interface RichTextContent { text: string; marks?: any[] }
+interface Category { id: string; name: string; order: number; questions: Question[]; description?: string | RichTextContent }
+interface Snapshot { packName: string; version: string; categories: Category[]; ai_generated?: boolean; description?: string | null }
 
 export default function SurveyFlow({
   surveyId,
@@ -29,49 +30,133 @@ export default function SurveyFlow({
       cat.questions.sort((a, b) => a.order - b.order).map(q => ({ ...q, categoryName: cat.name }))
     )
 
-  const [currentIndex, setCurrentIndex] = useState(0)
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [startTime] = useState(Date.now())
 
-  const current = allQuestions[currentIndex]
-  const progress = ((currentIndex) / allQuestions.length) * 100
-
+  // Validation function for checking if a question is answered
   const isAnswered = (q: Question) => {
-    
     if (!q.required) return true
     const answer = answers[q.id]
     if (!answer || answer.trim() === '') return false
     
-
     // Enforce selection limits for checkboxes
     if (q.type === 'checkbox' || q.type === 'checkboxes') {
-      const limit = (q as any).selectionLimit
-      const count = (q as any).selectionCount
+      const limit = (q as any).selectionLimit?.type
+      const count = (q as any).selectionLimit?.count
       const selected = answer?.split(',').filter(Boolean).length ?? 0
       if (limit === 'min' && count && selected < count) return false
       if (limit === 'exact' && count && selected !== count) return false
     }
-
     return true
-}
+  }
 
-  const canAdvance = !current?.required || isAnswered(current)
+  // Get current section and all its questions
+  const sortedCategories = snapshot.categories.sort((a, b) => a.order - b.order)
+  const currentSection = sortedCategories[currentSectionIndex]
+  const currentSectionQuestions = currentSection?.questions.sort((a, b) => a.order - b.order) || []
+  const totalQuestions = allQuestions.length
+  const questionsInCurrentSection = currentSectionQuestions.length
+  const answeredInSection = currentSectionQuestions.filter(q => isAnswered(q)).length
+  const progress = ((currentSectionIndex) / sortedCategories.length) * 100
+
+  // Render rich text content with formatting
+  const renderRichText = (content: string | RichTextContent | undefined | null) => {
+    if (!content) return null
+    
+    const text = typeof content === 'string' ? content : content?.text
+    const marks = typeof content === 'object' && content.marks ? content.marks : []
+    
+    if (!marks || marks.length === 0) {
+      return text
+    }
+
+    // Sort marks by start position
+    const sortedMarks = [...marks].sort((a, b) => a.start - b.start)
+    const segments: Array<{ text: string; marks: any[] }> = []
+    let lastEnd = 0
+
+    sortedMarks.forEach(mark => {
+      if (mark.start > lastEnd) {
+        segments.push({ text: text.substring(lastEnd, mark.start), marks: [] })
+      }
+
+      const markText = text.substring(mark.start, mark.end)
+      const existingSegment = segments.find(s => s.text === markText && s.marks.some(m => m.type === mark.type))
+      if (!existingSegment) {
+        segments.push({ text: markText, marks: [mark] })
+      }
+      lastEnd = mark.end
+    })
+
+    if (lastEnd < text.length) {
+      segments.push({ text: text.substring(lastEnd), marks: [] })
+    }
+
+    return (
+      <span>
+        {segments.map((seg, idx) => {
+          let element: React.ReactNode = seg.text
+          
+          seg.marks.forEach(mark => {
+            if (mark.type === 'bold') {
+              element = <strong key={`${idx}-bold`}>{element}</strong>
+            } else if (mark.type === 'italic') {
+              element = <em key={`${idx}-italic`}>{element}</em>
+            } else if (mark.type === 'underline') {
+              element = <u key={`${idx}-underline`}>{element}</u>
+            } else if (mark.type === 'strikethrough') {
+              element = <s key={`${idx}-strikethrough`}>{element}</s>
+            } else if (mark.type === 'link' && mark.url) {
+              element = <a key={`${idx}-link`} href={mark.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-700">{element}</a>
+            }
+          })
+          
+          return <span key={idx}>{element}</span>
+        })}
+      </span>
+    )
+  }
+
+  // Get text from description (handles RichTextContent)
+  const getDescriptionText = (desc?: string | RichTextContent | null) => {
+    if (!desc) return ''
+    if (typeof desc === 'string') return desc
+    if (desc && typeof desc === 'object' && 'text' in desc) return desc.text
+    return ''
+  }
+
+  // Neutral section colors that cycle through - more visible shades
+  const sectionColors = [
+    'bg-slate-100',   // Slate gray
+    'bg-amber-100',   // Warm sand
+    'bg-stone-100',   // Taupe/stone
+    'bg-cyan-100',    // Cool blue-gray
+  ]
+  const currentSectionColor = sectionColors[currentSectionIndex % sectionColors.length]
+
+  // Check if all required questions in current section are answered
+  const canAdvanceSection = currentSectionQuestions.every(q => isAnswered(q))
 
   const handleAnswer = (questionId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
   }
 
   const handleNext = () => {
-    if (currentIndex < allQuestions.length - 1) {
-      setCurrentIndex(i => i + 1)
+    if (currentSectionIndex < sortedCategories.length - 1) {
+      setCurrentSectionIndex(i => i + 1)
+      window.scrollTo(0, 0)
     }
   }
 
   const handleBack = () => {
-    if (currentIndex > 0) setCurrentIndex(i => i - 1)
+    if (currentSectionIndex > 0) {
+      setCurrentSectionIndex(i => i - 1)
+      window.scrollTo(0, 0)
+    }
   }
 
   const handleSubmit = async () => {
@@ -146,15 +231,24 @@ export default function SurveyFlow({
     <div className="flex flex-col min-h-screen">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-xl mx-auto flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-700">{snapshot.packName}</p>
-            <p className="text-xs text-gray-400">Question {currentIndex + 1} of {allQuestions.length}</p>
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">{snapshot.packName}</p>
+              <p className="text-xs text-gray-400">Section {currentSectionIndex + 1} of {sortedCategories.length}</p>
+            </div>
+            <p className="text-xs text-gray-400">{Math.round(progress)}% complete</p>
           </div>
-          <p className="text-xs text-gray-400">{Math.round(progress)}% complete</p>
+          
+          {/* Form description - shown on first section */}
+          {currentSectionIndex === 0 && snapshot.description && (
+            <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 whitespace-pre-wrap">
+              {renderRichText(snapshot.description)}
+            </div>
+          )}
         </div>
         {/* Progress bar */}
-        <div className="max-w-xl mx-auto mt-3">
+        <div className="max-w-3xl mx-auto mt-3">
           <div className="bg-gray-100 rounded-full h-1.5 overflow-hidden">
             <div
               className="bg-blue-600 h-full rounded-full transition-all duration-300"
@@ -164,389 +258,259 @@ export default function SurveyFlow({
         </div>
       </div>
 
-      {/* Question */}
+      {/* Questions Section */}
       <div className="flex-1 flex items-start justify-center px-6 py-10">
-        <div className="w-full max-w-xl">
-          {current && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-8">
-              {/* Category label */}
-              <p className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-4">
-                {current.categoryName}
-              </p>
+        <div className="w-full max-w-3xl">
+          {currentSection && (
+            <div className="space-y-6">
+              {/* Section Header */}
+              <div className={`${sectionColors[currentSectionIndex % sectionColors.length]} rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8`}>
+                <p className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-3 bg-gray-200 px-2 py-1 rounded inline-block w-fit">
+                  {currentSection.name}
+                </p>
+                
+                {/* Section description */}
+                {currentSection.description && (
+                  <div className="mb-4 p-4 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-800 whitespace-pre-wrap font-medium">
+                    {renderRichText(currentSection.description)}
+                  </div>
+                )}
+                
+                <p className="text-xs text-gray-500">
+                  {questionsInCurrentSection} question{questionsInCurrentSection !== 1 ? 's' : ''}
+                </p>
+              </div>
 
-              {/* Question prompt */}
-              <h2 className="text-lg font-semibold text-gray-900 leading-snug mb-6">
-                {current.prompt}
-                {current.required && <span className="text-red-400 ml-1">*</span>}
-              </h2>
-
-              {/* Options - Single Select (Radio) */}
-              {(current.type === 'single_select' || current.type === 'radio' || current.type === 'multiple_choice') && (
-                <div className="space-y-2">
-                  {current.options.sort((a, b) => a.order - b.order).map(opt => {
-                    const isOther = opt.value_key === '__other__'
-                    const isSelected = isOther
-                      ? answers[current.id]?.startsWith('__other__:')
-                      : answers[current.id] === opt.value_key
-
-                    return (
-                      <div key={opt.value_key}>
-                       {isOther ? (
-                        <Button
-                          variant={isSelected ? 'default' : 'outline'}
-                          className="w-full justify-start px-4 py-2 rounded-xl h-auto"
-                          onClick={() => {
-                            if (!isSelected) handleAnswer(current.id, '__other__:')
-                          }}
-                        >
-                          <span className="shrink-0 text-sm font-medium">Other:</span>
-                          <input
-                            type="text"
-                            value={answers[current.id]?.startsWith('__other__:') ? answers[current.id].replace('__other__:', '') : ''}
-                            onFocus={() => {
-                              if (!isSelected) handleAnswer(current.id, '__other__:')
-                            }}
-                            onChange={e => {
-                              e.stopPropagation()
-                              handleAnswer(current.id, `__other__:${e.target.value}`)
-                            }}
-                            onClick={e => e.stopPropagation()}
-                            placeholder="Please specify..."
-                            className={`flex-1 text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
-                          />
-                        </Button>
-                      ) : (
-                          <Button
-                            onClick={() => handleAnswer(current.id, opt.value_key)}
-                            variant={isSelected ? 'default' : 'outline'}
-                            className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
-                          >
-                            {opt.label}
-                          </Button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-
-              {/* Checkboxes - Multiple Select */}
-              {(current.type === 'checkbox' || current.type === 'checkboxes') && (
-                <div className="space-y-2">
-                  {current.options.sort((a, b) => a.order - b.order).map(opt => {
-                    const currentAnswers = answers[current.id]?.split(',').filter(Boolean) || []
-                    const isOther = opt.value_key === '__other__'
-                    const isSelected = isOther
-                      ? currentAnswers.some(a => a.startsWith('__other__:'))
-                      : currentAnswers.includes(opt.value_key)
-
-                    const limit = (current as any).selectionLimit
-                    const count = (current as any).selectionCount
-                    const maxReached = (limit === 'max' || limit === 'exact') && count && currentAnswers.length >= count
-
-                    return (
-                      <div key={opt.value_key}>
-                        {isOther ? (
-                          <Button
-                            variant={isSelected ? 'default' : 'outline'}
-                            className="w-full justify-start px-4 py-2 rounded-xl h-auto"
-                            onClick={() => {
-                              if (!isSelected && !maxReached) {
-                                const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
-                                handleAnswer(current.id, [...without, '__other__:'].join(','))
-                              } else if (isSelected) {
-                                const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
-                                handleAnswer(current.id, without.join(','))
-                              }
-                            }}
-                          >
-                            <span className="shrink-0 text-sm font-medium">Other:</span>
-                            <input
-                              type="text"
-                              value={currentAnswers.find(a => a.startsWith('__other__:'))?.replace('__other__:', '') ?? ''}
-                              onFocus={() => {
-                                if (!isSelected && !maxReached) {
-                                  const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
-                                  handleAnswer(current.id, [...without, '__other__:'].join(','))
-                                }
-                              }}
-                              onChange={e => {
-                                e.stopPropagation()
-                                const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
-                                handleAnswer(current.id, [...without, `__other__:${e.target.value}`].join(','))
-                              }}
-                              onClick={e => e.stopPropagation()}
-                              placeholder="Please specify..."
-                              className={`flex-1 text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
-                            />
-                          </Button>
-                        ) : (
-                          <Button
-                            onClick={() => {
-                              if (!isSelected && maxReached) return
-                              const newAnswers = isSelected
-                                ? currentAnswers.filter(a => a !== opt.value_key)
-                                : [...currentAnswers, opt.value_key]
-                              handleAnswer(current.id, newAnswers.join(','))
-                            }}
-                            disabled={!isSelected && !!maxReached}
-                            variant={isSelected ? 'default' : 'outline'}
-                            className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
-                          >
-                            {opt.label}
-                          </Button>
-                        )}
-                      </div>
-                    )
-                  })}
-
-                  {/* Helper text */}
-                  {(() => {
-                    const limit = (current as any).selectionLimit
-                    const count = (current as any).selectionCount
-                    if (!limit || limit === 'unlimited' || !count) return null
-                    const currentAnswers = answers[current.id]?.split(',').filter(Boolean) || []
-
-                    const messages = {
-                      max: `Select up to ${count} option(s)`,
-                      min: `Select at least ${count} option(s) — ${currentAnswers.length} selected`,
-                      exact: `Select exactly ${count} option(s) — ${currentAnswers.length} selected`,
-                    }
-                    return <p className="text-xs text-gray-400 mt-1">{messages[limit as 'max'|'min'|'exact']}</p>
-                  })()}
-                </div>
-              )}
-
-
-              {/* Dropdown Select */}
-              {current.type === 'dropdown' && (
-                <select
-                  value={answers[current.id] ?? ''}
-                  onChange={e => handleAnswer(current.id, e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="">Select an option...</option>
-                  {current.options.sort((a, b) => a.order - b.order).map(opt => (
-                    <option key={opt.value_key} value={opt.value_key}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {/* Scale Questions - Numeric Rating */}
-              {(current.type === 'scale' || current.type === 'linear_scale') && (() => {
-                // Use snapshot fields if available (AI surveys), else parse from prompt
-                let min: number
-                let max: number
-                let leftLabel: string
-                let rightLabel: string
-                let isPercentage = false
-
-                if (current.scaleMin !== undefined && current.scaleMax !== undefined) {
-                  min = current.scaleMin
-                  max = current.scaleMax
-                  leftLabel = current.minLabel ?? 'Low'
-                  rightLabel = current.maxLabel ?? 'High'
-                } else {
-                  // Parse scale range - match various dash types: hyphen, en-dash, em-dash, minus
-                  const rangeMatch = current.prompt.match(/(\d+)\s*[\-–—−to]+\s*(\d+)(%)?/i)
-                  min = 0
-                  max = 10
-                  if (rangeMatch) {
-                    min = parseInt(rangeMatch[1])
-                    max = parseInt(rangeMatch[2])
-                    isPercentage = rangeMatch[3] === '%'
-                  }
-                  // Determine labels based on scale type
-                  leftLabel = 'Low'
-                  rightLabel = 'High'
-                  if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('recommend')) {
-                    leftLabel = 'Not likely'
-                    rightLabel = 'Very likely'
-                  } else if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('renew')) {
-                    leftLabel = 'Not likely'
-                    rightLabel = 'Very likely'
-                  } else if (min === 0 && max === 10 && current.prompt.toLowerCase().includes('shop again')) {
-                    leftLabel = 'Not likely'
-                    rightLabel = 'Very likely'
-                  } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('intuitive')) {
-                    leftLabel = 'Very Confusing'
-                    rightLabel = 'Very Intuitive'
-                  } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('satisfied')) {
-                    leftLabel = 'Very unsatisfied'
-                    rightLabel = 'Very satisfied'
-                  } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('rate')) {
-                    leftLabel = 'Poor'
-                    rightLabel = 'Excellent'
-                  } else if (min === 1 && max === 5 && current.prompt.toLowerCase().includes('value')) {
-                    leftLabel = 'Poor value'
-                    rightLabel = 'Great value'
-                  } else if (isPercentage) {
-                    leftLabel = '0%'
-                    rightLabel = '100%'
-                  }
-                }
-
-                // Generate scale values
-                const scaleValues = Array.from({ length: max - min + 1 }, (_, i) => min + i)
-
-                // Determine grid class based on scale length
-                let gridClass = 'grid gap-2'
-                if (scaleValues.length === 11) gridClass += ' grid-cols-6 sm:grid-cols-11'
-                else if (scaleValues.length === 5) gridClass += ' grid-cols-5'
-                else if (scaleValues.length === 6) gridClass += ' grid-cols-6'
-                else if (scaleValues.length <= 10) gridClass += ' grid-cols-5 sm:grid-cols-10'
-                else gridClass = 'flex flex-wrap gap-2' // For 0-100 range
-
-                return (
-                  <div>
-                    <div className={gridClass}>
-                      {scaleValues.map(num => (
-                        <Button
-                          key={num}
-                          onClick={() => handleAnswer(current.id, num.toString())}
-                          variant={answers[current.id] === num.toString() ? 'default' : 'outline'}
-                          className={`${scaleValues.length <= 11 ? 'aspect-square' : 'px-4 py-2'} flex items-center justify-center rounded-lg text-sm font-semibold transition-all`}
-                        >
-                          {num}{isPercentage && num === max ? '%' : ''}
-                        </Button>
-                      ))}
+              {/* All questions in section */}
+              {currentSectionQuestions.map((question, qIndex) => (
+                <div key={question.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 sm:p-8">
+                  {/* Question number and prompt */}
+                  <div className="flex gap-4">
+                    <div className="shrink-0 w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-sm font-semibold">
+                      {qIndex + 1}
                     </div>
-                    <div className="flex justify-between mt-2 px-1">
-                      <span className="text-xs text-gray-500">{leftLabel}</span>
-                      <span className="text-xs text-gray-500">{rightLabel}</span>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 leading-snug mb-5">
+                        {question.prompt}
+                        {question.required && <span className="text-red-400 ml-1">*</span>}
+                      </h3>
+
+                      {/* Render question type */}
+                      {(question.type === 'single_select' || question.type === 'radio' || question.type === 'multiple_choice') && (
+                        <div className="space-y-2">
+                          {question.options.sort((a, b) => a.order - b.order).map(opt => {
+                            const isOther = opt.value_key === '__other__'
+                            const isSelected = isOther
+                              ? answers[question.id]?.startsWith('__other__:')
+                              : answers[question.id] === opt.value_key
+
+                            return (
+                              <div key={opt.value_key}>
+                                {isOther ? (
+                                  <Button
+                                    variant={isSelected ? 'default' : 'outline'}
+                                    className="w-full justify-start px-4 py-2 rounded-xl h-auto"
+                                    onClick={() => {
+                                      if (!isSelected) handleAnswer(question.id, '__other__:')
+                                    }}
+                                  >
+                                    <span className="shrink-0 text-sm font-medium">Other:</span>
+                                    <input
+                                      type="text"
+                                      value={answers[question.id]?.startsWith('__other__:') ? answers[question.id].replace('__other__:', '') : ''}
+                                      onFocus={() => {
+                                        if (!isSelected) handleAnswer(question.id, '__other__:')
+                                      }}
+                                      onChange={e => {
+                                        e.stopPropagation()
+                                        handleAnswer(question.id, `__other__:${e.target.value}`)
+                                      }}
+                                      onClick={e => e.stopPropagation()}
+                                      placeholder="Please specify..."
+                                      className={`flex-1 text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
+                                    />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    onClick={() => handleAnswer(question.id, opt.value_key)}
+                                    variant={isSelected ? 'default' : 'outline'}
+                                    className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
+                                  >
+                                    {opt.label}
+                                  </Button>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Checkboxes */}
+                      {(question.type === 'checkbox' || question.type === 'checkboxes') && (
+                        <div className="space-y-2">
+                          {question.options.sort((a, b) => a.order - b.order).map(opt => {
+                            const currentAnswers = answers[question.id]?.split(',').filter(Boolean) || []
+                            const isOther = opt.value_key === '__other__'
+                            const isSelected = isOther
+                              ? currentAnswers.some(a => a.startsWith('__other__:'))
+                              : currentAnswers.includes(opt.value_key)
+                            const limit = (question as any).selectionLimit?.type
+                            const count = (question as any).selectionLimit?.count
+                            const maxReached = (limit === 'max' || limit === 'exact') && count && currentAnswers.length >= count
+
+                            return (
+                              <div key={opt.value_key}>
+                                {isOther ? (
+                                  <Button
+                                    variant={isSelected ? 'default' : 'outline'}
+                                    disabled={!isSelected && !!maxReached}
+                                    className="w-full justify-start px-4 py-2 rounded-xl h-auto"
+                                    onClick={() => {
+                                      if (!isSelected && maxReached) return
+                                      if (!isSelected) {
+                                        const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                        handleAnswer(question.id, [...without, '__other__:'].join(','))
+                                      } else if (isSelected) {
+                                        const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                        handleAnswer(question.id, without.join(','))
+                                      }
+                                    }}
+                                  >
+                                    <span className="shrink-0 text-sm font-medium">Other:</span>
+                                    <input
+                                      type="text"
+                                      value={currentAnswers.find(a => a.startsWith('__other__:'))?.replace('__other__:', '') ?? ''}
+                                      onFocus={() => {
+                                        if (!isSelected && maxReached) return
+                                        if (!isSelected) {
+                                          const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                          handleAnswer(question.id, [...without, '__other__:'].join(','))
+                                        }
+                                      }}
+                                      onChange={e => {
+                                        e.stopPropagation()
+                                        const without = currentAnswers.filter(a => !a.startsWith('__other__:'))
+                                        handleAnswer(question.id, [...without, `__other__:${e.target.value}`].join(','))
+                                      }}
+                                      onClick={e => e.stopPropagation()}
+                                      placeholder="Please specify..."
+                                      className={`flex-1 text-sm focus:outline-none bg-transparent ${isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'}`}
+                                    />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    onClick={() => {
+                                      if (!isSelected && maxReached) return
+                                      const newAnswers = isSelected
+                                        ? currentAnswers.filter(a => a !== opt.value_key)
+                                        : [...currentAnswers, opt.value_key]
+                                      handleAnswer(question.id, newAnswers.join(','))
+                                    }}
+                                    disabled={!isSelected && !!maxReached}
+                                    variant={isSelected ? 'default' : 'outline'}
+                                    className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
+                                  >
+                                    {opt.label}
+                                  </Button>
+                                )}
+                              </div>
+                            )
+                          })}
+                          {(() => {
+                            const limit = (question as any).selectionLimit?.type
+                            const count = (question as any).selectionLimit?.count
+                            if (!limit || limit === 'unlimited' || !count) return null
+                            const currentAnswers = answers[question.id]?.split(',').filter(Boolean) || []
+                            const messages = {
+                              max: `Select up to ${count} option(s)`,
+                              min: `Select at least ${count} option(s) — ${currentAnswers.length} selected`,
+                              exact: `Select exactly ${count} option(s) — ${currentAnswers.length} selected`,
+                            }
+                            return <p className="text-xs text-gray-400 mt-1">{messages[limit as 'max'|'min'|'exact']}</p>
+                          })()}
+                        </div>
+                      )}
+
+                      {/* Dropdown */}
+                      {question.type === 'dropdown' && (
+                        <select
+                          value={answers[question.id] ?? ''}
+                          onChange={e => handleAnswer(question.id, e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        >
+                          <option value="">Select an option...</option>
+                          {question.options.sort((a, b) => a.order - b.order).map(opt => (
+                            <option key={opt.value_key} value={opt.value_key}>{opt.label}</option>
+                          ))}
+                        </select>
+                      )}
+
+                      {/* Linear Scale */}
+                      {(question.type === 'scale' || question.type === 'linear_scale') && (() => {
+                        let min = 1, max = 5, leftLabel = 'Low', rightLabel = 'High', isPercentage = false
+                        if (question.scaleMin !== undefined) { min = question.scaleMin; max = question.scaleMax || 5; leftLabel = question.minLabel || 'Low'; rightLabel = question.maxLabel || 'High' }
+                        const scaleValues = Array.from({ length: max - min + 1 }, (_, i) => min + i)
+                        let gridClass = scaleValues.length <= 5 ? 'grid-cols-5' : 'grid-cols-6 sm:grid-cols-11'
+                        return (
+                          <div>
+                            <div className={`grid ${gridClass} gap-2`}>
+                              {scaleValues.map(num => (
+                                <Button
+                                  key={num}
+                                  onClick={() => handleAnswer(question.id, num.toString())}
+                                  variant={answers[question.id] === num.toString() ? 'default' : 'outline'}
+                                  className="aspect-square flex items-center justify-center rounded-lg text-sm font-semibold"
+                                >
+                                  {num}
+                                </Button>
+                              ))}
+                            </div>
+                            <div className="flex justify-between mt-2 px-1">
+                              <span className="text-xs text-gray-500">{leftLabel}</span>
+                              <span className="text-xs text-gray-500">{rightLabel}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+
+                      {/* Text inputs */}
+                      {(question.type === 'text' || question.type === 'textarea' || question.type === 'long_text') && (
+                        <textarea rows={4} value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Type your answer…" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                      )}
+                      {question.type === 'short_text' && (
+                        <input type="text" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Type your answer…" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      )}
+                      {question.type === 'email' && (
+                        <input type="email" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="email@example.com" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      )}
+                      {question.type === 'url' && (
+                        <input type="url" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="https://example.com" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      )}
+                      {question.type === 'date' && (
+                        <input type="date" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      )}
+                      {question.type === 'time' && (
+                        <input type="time" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      )}
+                      {question.type === 'number' && (
+                        <input type="number" value={answers[question.id] ?? ''} onChange={e => handleAnswer(question.id, e.target.value)} placeholder="Enter a number…" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      )}
+                      {question.type === 'yes_no' && (
+                        <div className="space-y-2">
+                          {['Yes', 'No'].map(opt => (
+                            <Button key={opt.toLowerCase()} onClick={() => handleAnswer(question.id, opt.toLowerCase())} variant={answers[question.id] === opt.toLowerCase() ? 'default' : 'outline'} className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm">
+                              {opt}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
-                )
-              })()}
-
-              {/* Long Text Input / Textarea */}
-              {(current.type === 'text' || current.type === 'textarea' || current.type === 'long_text') && (
-                <textarea
-                  rows={4}
-                  value={answers[current.id] ?? ''}
-                  onChange={e => handleAnswer(current.id, e.target.value)}
-                  placeholder="Type your answer here…"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-              )}
-
-              {/* Short Text Input */}
-              {current.type === 'short_text' && (
-                <input
-                  type="text"
-                  value={answers[current.id] ?? ''}
-                  onChange={e => handleAnswer(current.id, e.target.value)}
-                  placeholder="Type your answer…"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-
-              {/* Email Input */}
-              {current.type === 'email' && (
-                <input
-                  type="email"
-                  value={answers[current.id] ?? ''}
-                  onChange={e => handleAnswer(current.id, e.target.value)}
-                  placeholder="email@example.com"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-
-              {/* URL Input */}
-              {current.type === 'url' && (
-                <input
-                  type="url"
-                  value={answers[current.id] ?? ''}
-                  onChange={e => handleAnswer(current.id, e.target.value)}
-                  placeholder="https://example.com"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-
-              {/* Date Input */}
-              {current.type === 'date' && (
-                <input
-                  type="date"
-                  value={answers[current.id] ?? ''}
-                  onChange={e => handleAnswer(current.id, e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-
-              {/* Time Input */}
-              {current.type === 'time' && (
-                <input
-                  type="time"
-                  value={answers[current.id] ?? ''}
-                  onChange={e => handleAnswer(current.id, e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-
-              {/* Number Input */}
-              {current.type === 'number' && (
-                <input
-                  type="number"
-                  value={answers[current.id] ?? ''}
-                  onChange={e => handleAnswer(current.id, e.target.value)}
-                  placeholder="Enter a number…"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
-
-              {/* Yes/No Radio */}
-              {current.type === 'yes_no' && (
-                <div className="space-y-2">
-                  {['Yes', 'No'].map(opt => (
-                    <Button
-                      key={opt.toLowerCase()}
-                      onClick={() => handleAnswer(current.id, opt.toLowerCase())}
-                      variant={answers[current.id] === opt.toLowerCase() ? 'default' : 'outline'}
-                      className="w-full text-left justify-start px-4 py-3 rounded-xl text-sm transition-all"
-                    >
-                      {opt}
-                    </Button>
-                  ))}
                 </div>
-              )}
-
-              {/* Embedded Link - Imported External Survey */}
-              {current.type === 'embedded_link' && (() => {
-                const embedUrl = (current as any).embed_url as string
-                const isOpened = answers[current.id] === 'opened'
-                return (
-                  <div className="space-y-4">
-                    <p className="text-sm text-gray-500">
-                      This survey is hosted on an external platform. Click the button below to open it in a new tab.
-                    </p>
-                    <a
-                      href={embedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => handleAnswer(current.id, 'opened')}
-                      className="flex items-center justify-center gap-2 w-full px-5 py-3 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors"
-                    >
-                      Open External Survey
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
-                    {isOpened && (
-                      <p className="text-xs text-green-600 text-center">
-                        Survey opened — come back here and click Submit when done.
-                      </p>
-                    )}
-                    {embedUrl && (
-                      <p className="text-xs text-gray-400 break-all text-center">{embedUrl}</p>
-                    )}
-                  </div>
-                )
-              })()}
+              ))}
 
               {error && (
-                <p className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl">
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-3 rounded-xl">
                   {error}
                 </p>
               )}
@@ -554,38 +518,25 @@ export default function SurveyFlow({
           )}
 
           {/* Navigation */}
-          <div className="bg-white border-t border-gray-200 px-6 py-4 mt-1 rounded-3xl shadow-md">
-            <div className="max-w-xl mx-auto flex gap-3">
-              {currentIndex > 0 && (
-                <Button
-                  variant={'outline'}
-                  onClick={handleBack}
-                >
+          <div className="bg-white border-t border-gray-200 px-6 py-4 mt-6 rounded-3xl shadow-md">
+            <div className="max-w-3xl mx-auto flex gap-3">
+              {currentSectionIndex > 0 && (
+                <Button variant={'outline'} onClick={handleBack}>
                   ← Back
                 </Button>
               )}
-              {currentIndex < allQuestions.length - 1 ? (
-                <Button
-                  onClick={handleNext}
-                  disabled={!canAdvance}
-                  className="flex-1"
-                >
-                  Next →
+              {currentSectionIndex < sortedCategories.length - 1 ? (
+                <Button onClick={handleNext} disabled={!canAdvanceSection} className="flex-1">
+                  Next Section →
                 </Button>
               ) : (
-                <Button
-                  onClick={handleSubmit}
-                  disabled={submitting || !canAdvance}
-                  className="flex-1"
-                >
+                <Button onClick={handleSubmit} disabled={submitting || !canAdvanceSection} className="flex-1">
                   {submitting ? 'Submitting…' : 'Submit Response'}
                 </Button>
               )}
             </div>
           </div>
         </div>
-
-      
       </div>
 
 
