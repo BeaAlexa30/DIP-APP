@@ -252,12 +252,12 @@ export default function SurveyFlow({
       {/* Header — my branch styling (big title, responsive padding) */}
       <div className="bg-white border-b border-gray-200 px-3 sm:px-6 py-4">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-3xl font-medium text-gray-700">{snapshot.packName}</p>
-              <p className="text-xs text-gray-400">Section {currentSectionIndex + 1} of {sortedCategories.length}</p>
+          <div className="flex-row items-center justify-between mb-3 w-full">
+            <div className='p-2'>
+              <p className="text-3xl font-medium text-gray-700 break-words w-full">{snapshot.packName}</p>
+              <p className="text-xs text-gray-400 mt-2">Section {currentSectionIndex + 1} of {sortedCategories.length}</p>
             </div>
-            <p className="text-xs text-gray-400 whitespace-nowrap">{Math.round(progress)}% complete</p>
+            <p className="text-xs text-gray-400 whitespace-nowrap mt-3">{Math.round(progress)}% complete</p>
           </div>
 
           {currentSectionIndex === 0 && snapshot.description && (
@@ -289,7 +289,7 @@ export default function SurveyFlow({
                   {currentSection.name}
                 </p>
                 {currentSection.description && (
-                  <div className="mb-4 pl-4 rounded-lg text-sm text-gray-800 font-medium">
+                  <div className="mb-4 pl-4 rounded-lg text-sm text-gray-800 font-medium break-words">
                     {renderRichText(currentSection.description)}
                   </div>
                 )}
@@ -313,7 +313,7 @@ export default function SurveyFlow({
 
                       {/* Multiple Choice */}
                       {(question.type === 'single_select' || question.type === 'radio' || question.type === 'multiple_choice') && (
-                        <div className="space-y-3 sm:space-y-4">
+                        <div className="space-y-3 sm:space-y-4 ">
                           {[...question.options].sort((a, b) => a.order - b.order).map(opt => {
                             const isOther    = opt.value_key === '__other__'
                             const isSelected = isOther
@@ -321,11 +321,11 @@ export default function SurveyFlow({
                               : answers[question.id] === opt.value_key
 
                             return (
-                              <div key={opt.value_key}>
+                              <div key={opt.value_key} className='w-full bg-green-100 flex '>
                                 {isOther ? (
                                   <Button
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full flex flex-wrap items-center gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl h-auto text-xs sm:text-sm border sm:border-2 text-left"
+                                    className=" break-words w-full flex flex-wrap items-center gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl h-auto text-xs sm:text-sm border sm:border-2 text-left"
                                     onClick={() => { if (!isSelected) handleAnswer(question.id, '__other__:') }}
                                   >
                                     <span className="font-medium whitespace-nowrap">Other:</span>
@@ -341,7 +341,7 @@ export default function SurveyFlow({
                                       onClick={e => e.stopPropagation()}
                                       placeholder="Please specify..."
                                       className={`flex-1 min-w-[100px] text-xs sm:text-sm focus:outline-none bg-transparent ${
-                                        isSelected ? 'text-white placeholder:text-white/60' : 'text-gray-700 placeholder:text-gray-400'
+                                        isSelected ? 'text-white placeholder:text-white/60 break-words' : 'text-gray-700 placeholder:text-gray-400 break-all'
                                       }`}
                                     />
                                   </Button>
@@ -349,7 +349,7 @@ export default function SurveyFlow({
                                   <Button
                                     onClick={() => handleAnswer(question.id, opt.value_key)}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace-normal text-left"
+                                    className="  justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace  text-left break-all w-full whitespace-normal "
                                   >
                                     {opt.label}
                                   </Button>
@@ -422,7 +422,7 @@ export default function SurveyFlow({
                                     }}
                                     disabled={!isSelected && !!maxReached}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="w-full justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace-normal text-left"
+                                    className="justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace  text-left break-all w-full whitespace-normal"
                                   >
                                     {opt.label}
                                   </Button>

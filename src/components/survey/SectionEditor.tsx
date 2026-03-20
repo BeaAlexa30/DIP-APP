@@ -463,13 +463,13 @@ export default function SectionEditor({
           </div>
           <button
             onClick={onExpand}
-            className="flex-1 px-4 py-3 flex items-start gap-3 hover:bg-blue-50/50 transition-colors"
+            className="flex-1 px-4 py-3 flex items-start gap-3 hover:bg-blue-50/50 transition-colors w-full"
           >
             <div className="shrink-0 w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-semibold">
               {section.order}
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium text-gray-900">{section.name || '(Untitled Section)'}</p>
+              <p className="text-sm font-medium text-gray-900 break-words">{section.name || '(Untitled Section)'}</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {section.questions.length} question{section.questions.length !== 1 ? 's' : ''}
                 {sectionIsDragTarget && (
@@ -584,14 +584,14 @@ export default function SectionEditor({
                               <button
                                 onDragStart={e => e.preventDefault()}
                                 onClick={() => onExpandQuestion?.(q.id)}
-                                className={`flex-1 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
+                                className={`w-10/12 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
                                   isQuestionExpanded
                                     ? 'bg-violet-100 border-violet-300'
                                     : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50'
                                 }`}
                               >
-                                <div className="flex-1 min-w-0 text-left">
-                                  <p className="text-xs font-medium text-gray-900 line-clamp-2 break-words w-full">
+                                <div className=" text-left w-11/12">
+                                  <p className="text-xs font-medium text-gray-900 break-words w-full ">
                                     {typeof q.prompt === 'string' ? q.prompt : q.prompt?.text || '(untitled)'}
                                   </p>
                                   <p className="text-xs text-gray-500 mt-0.5">
