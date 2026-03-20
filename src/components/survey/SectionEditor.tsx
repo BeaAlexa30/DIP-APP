@@ -215,7 +215,7 @@ export default function SectionEditor({
                             }}
                             className={`flex-1 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
                               isQuestionExpanded
-                                ? 'bg-violet-100 border-violet-300'
+                                ? 'bg-violet-100 border-violet-300 w-10/12'
                                 : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50 w-10/12'
                             }`}
                           >
