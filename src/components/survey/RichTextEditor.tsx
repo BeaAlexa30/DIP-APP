@@ -204,45 +204,6 @@ export default function RichTextEditor({
           >
             U
           </button>
-=======
-      {/* Formatting Preview */}
-      {marks.length > 0 && (
-        <div className="space-y-3">
-          {/* Visual Preview */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-xs font-semibold text-blue-900 mb-2">Preview:</p>
-            <div className="text-sm text-gray-700 leading-relaxed">
-              {renderPreview()}
-            </div>
-          </div>
-
-          {/* Formatting Details */}
-          <div className="text-xs text-gray-500 space-y-1">
-            <p className="font-semibold">Applied formatting:</p>
-            {marks.map((mark, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200"
-              >
-                <span>
-                  <strong className="text-gray-700">
-                    {mark.type === 'link' ? '🔗' : mark.type === 'bold' ? 'B' : mark.type === 'italic' ? 'I' : 'U'}
-                  </strong>
-                  {': '}
-                  {text.substring(mark.start, Math.min(mark.end, mark.start + 30))}
-                  {mark.end - mark.start > 30 ? '...' : ''}
-                  {mark.type === 'link' && ` → ${mark.url}`}
-                </span>
-                <button
-                  onClick={() => removeMarkAtRange(mark.type, mark.start, mark.end)}
-                  className="text-red-600 hover:text-red-700 text-xs font-medium"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
->>>>>>> e05c6d9f7e1230c700f65601ed1a7e12beb6f486
         </div>
       )}
     </div>
