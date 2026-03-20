@@ -124,6 +124,9 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     setIsOpen(false)
   }
 
+    const [sectionDragIndex, setSectionDragIndex] = useState<number | null>(null)
+  const [sectionDragOver, setSectionDragOver] = useState<number | null>(null)
+
   // Render rich text with formatting
   const renderRichText = (content: string | RichTextContent | undefined) => {
     if (!content) return null
@@ -546,8 +549,28 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                         Sections ({sections.length})
                       </p>
                       {sections.map((section, index) => (
-                        <SectionEditor
+                        <div
                           key={section.id}
+                          draggable={false}
+                          onDragOver={e => { e.preventDefault(); setSectionDragOver(index) }}
+                          onDrop={() => {
+                            if (sectionDragIndex === null || sectionDragIndex === index) return
+                            const reordered = [...sections]
+                            const [moved] = reordered.splice(sectionDragIndex, 1)
+                            reordered.splice(index, 0, moved)
+                            setSections(reordered.map((s, i) => ({ ...s, order: i + 1 })))
+                            setSectionDragIndex(null)
+                            setSectionDragOver(null)
+                          }}
+                          onDragEnd={() => { setSectionDragIndex(null); setSectionDragOver(null) }}
+                          onDragStart={() => setSectionDragIndex(index)}
+                          className={`rounded-xl transition-all ${
+                            sectionDragOver === index && sectionDragIndex !== index
+                              ? 'border-2 border-blue-400 bg-blue-50'
+                              : ''
+                          }`}
+                        >
+                        <SectionEditor
                           section={{
                             ...section,
                             order: index + 1,
@@ -573,6 +596,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                           onExpandQuestion={(id: string | null) => setExpandedQuestionId(id === expandedQuestionId ? null : id)}
                           onChangeQuestionType={changeQuestionType}
                         />
+                        </div>
                       ))}
                     </div>
                   )}

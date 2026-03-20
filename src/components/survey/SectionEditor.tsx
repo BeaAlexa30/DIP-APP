@@ -98,24 +98,36 @@ export default function SectionEditor({
       }`}
     >
       {/* Header / Collapse Toggle */}
-      <button
-        onClick={onExpand}
-        className="w-full px-4 py-3 flex items-start gap-3 hover:bg-blue-50/50 transition-colors"
-      >
-        <div className="shrink-0 w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-semibold">
-          {section.order}
+      <div className="flex items-center">
+        <div
+          className="w-5 h-5 bg-gray-300 rounded shrink-0 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-500 ml-3"
+          title="Drag to reorder section"
+          onMouseDown={e => {
+            const parent = e.currentTarget.closest('[draggable]') as HTMLElement
+            if (parent) parent.draggable = true
+          }}
+        >
+          ⠿
         </div>
-        <div className="flex-1 min-w-0 text-left">
-          <p className="text-sm font-medium text-gray-900">{section.name || '(Untitled Section)'}</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {section.questions.length} question{section.questions.length !== 1 ? 's' : ''}
-            {section.description && ' • Has description'}
-          </p>
-        </div>
-        <span className={`text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}>
-          ▼
-        </span>
-      </button>
+        <button
+          onClick={onExpand}
+          className="flex-1 px-4 py-3 flex items-start gap-3 hover:bg-blue-50/50 transition-colors"
+        >
+          <div className="shrink-0 w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-semibold">
+            {section.order}
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-sm font-medium text-gray-900">{section.name || '(Untitled Section)'}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {section.questions.length} question{section.questions.length !== 1 ? 's' : ''}
+              {section.description && ' • Has description'}
+            </p>
+          </div>
+          <span className={`text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}>
+            ▼
+          </span>
+        </button>
+      </div>
 
       {/* Expanded Content */}
       {isExpanded && (
@@ -160,7 +172,7 @@ export default function SectionEditor({
                 <p className="text-xs font-semibold text-gray-700 mb-2">
                   Questions ({section.questions.length})
                 </p>
-                <div className="space-y-2 bg-white rounded-lg border border-blue-100 p-3 ">
+                <div className="space-y-2 bg-white rounded-lg border border-blue-100 p-3">
                   {section.questions.map((q: any, idx: number) => {
                     const isQuestionExpanded = expandedQuestionId === q.id
                     return (
@@ -192,7 +204,7 @@ export default function SectionEditor({
                         }`}
                       >
                         {/* Drag handle + collapse toggle row */}
-                        <div className="flex items-center gap-2 w-full">
+                        <div className="flex items-center gap-2">
                           <div
                             className="w-5 h-5 bg-gray-300 rounded shrink-0 cursor-grab active:cursor-grabbing ml-2 mt-1 flex items-center justify-center"
                             title="Drag to reorder"
@@ -215,12 +227,12 @@ export default function SectionEditor({
                             }}
                             className={`flex-1 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
                               isQuestionExpanded
-                                ? 'bg-violet-100 border-violet-300 w-10/12'
-                                : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50 w-10/12'
+                                ? 'bg-violet-100 border-violet-300'
+                                : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50'
                             }`}
                           >
-                            <div className="flex-1 min-w-0 text-left ">
-                              <p className="text-xs font-medium text-gray-900 line-clamp-2 break-words w-full ">
+                            <div className="flex-1 min-w-0 text-left">
+                              <p className="text-xs font-medium text-gray-900 line-clamp-2">
                                 {typeof q.prompt === 'string' ? q.prompt : q.prompt?.text || '(untitled)'}
                               </p>
                               <p className="text-xs text-gray-500 mt-0.5">
@@ -319,12 +331,12 @@ export default function SectionEditor({
                                           }}
                                           onDrop={() => {
                                             if (!optDragIndex || optDragIndex.qId !== q.id || optDragIndex.idx === optIdx) return
-                                            // prevent dropping onto or after __other__
+                                            // prevent dropping onto or after "other"
                                             if (isOther) return
                                             const reordered = [...q.options]
                                             const [moved] = reordered.splice(optDragIndex.idx, 1)
                                             reordered.splice(optIdx, 0, moved)
-                                            // always keep __other__ at the end
+                                            // always keep "other" at the end
                                             const withoutOther = reordered.filter((o: any) => o.value_key !== '__other__')
                                             const otherOpt = reordered.find((o: any) => o.value_key === '__other__')
                                             const final = otherOpt ? [...withoutOther, otherOpt] : withoutOther
@@ -373,7 +385,7 @@ export default function SectionEditor({
                                           className={`flex-1 px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1 ${
                                             isOther
                                               ? 'bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed'
-                                              : 'border-violet-100 focus:ring-violet-400 bg-white w-3/12'
+                                              : 'border-violet-100 focus:ring-violet-400 bg-white'
                                           }`}
                                         />
                                         
@@ -642,26 +654,6 @@ export default function SectionEditor({
 
           {/* Action Buttons */}
           <div className="border-t border-blue-200 px-4 py-3 flex items-center justify-between gap-2">
-            <div className="flex gap-1.5">
-              {canMoveUp && (
-                <button
-                  onClick={onMoveUp}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors"
-                  title="Move section up"
-                >
-                  ▲
-                </button>
-              )}
-              {canMoveDown && (
-                <button
-                  onClick={onMoveDown}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors"
-                  title="Move section down"
-                >
-                  ▼
-                </button>
-              )}
-            </div>
             <button
               onClick={onRemove}
               className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors font-medium"
