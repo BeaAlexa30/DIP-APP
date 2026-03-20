@@ -98,14 +98,14 @@ export default function SurveyCard({
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">{frameworkName}</h3>
+        <div className="flex items-start justify-between w-full">
+          <div className=' w-9/12'>
+            <h3 className="text-sm font-semibold text-gray-900 break-words w-full">{frameworkName}</h3>
             <p className="text-xs text-gray-500 mt-0.5">
               Version {frameworkVersion}
             </p>
           </div>
-          <span className={`text-xs font-medium px-3 py-1.5 rounded-full ${
+          <span className={`text-xs font-medium px-3 py-1.5 rounded-full  ${
             survey.status === 'published' ? 'bg-green-100 text-green-700' : 
             survey.status === 'closed' ? 'bg-gray-100 text-gray-500' : 
             'bg-yellow-100 text-yellow-700'
