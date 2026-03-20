@@ -746,7 +746,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
 
                   {/* Description */}
                   <div>
-                    <label htmlFor="edit-survey-description" className="block text-sm font-semibold text-gray-800 mb-2">
+                    <label className="block text-sm font-semibold text-gray-800 mb-2">
                       Form Description <span className="text-gray-400 font-normal">(optional)</span>
                     </label>
                     <RichTextEditor

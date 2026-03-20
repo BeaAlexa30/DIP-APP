@@ -26,7 +26,10 @@ import {
   validateQuestion,
 } from '@/types/SurveyBuilder'
 import RichTextEditor from '@/components/survey/RichTextEditor'
-import SectionEditor from '@/components/survey/SectionEditor'
+import SectionEditor, {
+  CrossSectionDragState,
+  SectionDropIndicator,
+} from '@/components/survey/SectionEditor'
 import SkipLogicEditor from '@/components/survey/SkipLogicEditor'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -114,9 +117,68 @@ export default function AddOrGenerateSurveyDialog({
   const [customSaving, setCustomSaving] = useState(false)
   const [customError, setCustomError] = useState<string | null>(null)
   const [customSuccess, setCustomSuccess] = useState(false)
+  const [crossDragState, setCrossDragState] = useState<CrossSectionDragState | null>(null)
+  const [sectionDropIndicator, setSectionDropIndicator] = useState<SectionDropIndicator | null>(null)
 
   const availablePacks = packs.filter(p =>
     !existingPackIds.includes(p.id) && !addedPackIds.has(p.id)
+  )
+
+  // — Cross-section drag handlers ——
+  const handleCrossDragStart = useCallback((state: CrossSectionDragState) => {
+    setCrossDragState(state)
+  }, [])
+
+  const handleCrossDragEnd = useCallback(() => {
+    setCrossDragState(null)
+    setSectionDropIndicator(null)
+  }, [])
+
+  const handleCrossDrop = useCallback(
+    (targetSectionId: string, targetIndex: number) => {
+      if (!crossDragState) return
+      const { sourceSectionId, questionId } = crossDragState
+      setCrossDragState(null)
+      setSectionDropIndicator(null)
+
+      const sourceSection = customSections.find(s => s.id === sourceSectionId)
+      if (!sourceSection) return
+
+      const questionIndex = sourceSection.questions.findIndex(q => q.id === questionId)
+      if (questionIndex === -1) return
+
+      const question = sourceSection.questions[questionIndex]
+
+      // Remove from source
+      const newSections = customSections.map(s => {
+        if (s.id === sourceSectionId) {
+          return {
+            ...s,
+            questions: s.questions.filter((_, idx) => idx !== questionIndex),
+          }
+        }
+        return s
+      })
+
+      // Add to target
+      const updated = newSections.map(s => {
+        if (s.id === targetSectionId) {
+          const newQuestions = [...s.questions]
+          newQuestions.splice(targetIndex, 0, { ...question, order: targetIndex + 1 })
+          return { ...s, questions: newQuestions }
+        }
+        return s
+      })
+
+      // Re-number all questions
+      const final = updated.map(s => ({
+        ...s,
+        questions: s.questions.map((q, idx) => ({ ...q, order: idx + 1 })),
+      }))
+
+      setCustomSections(final)
+    },
+    [crossDragState, customSections]
   )
 
   // ── Fetch recommendations when dialog opens on recommend tab ─────────────────
@@ -774,6 +836,11 @@ export default function AddOrGenerateSurveyDialog({
                   onExpandSection={(id: string) => setExpandedSectionId(id === expandedSectionId ? null : id)}
                   onSave={handleSaveCustomSurvey}
                   onClose={handleClose}
+                  crossDragState={crossDragState}
+                  onCrossDragStart={handleCrossDragStart}
+                  onCrossDragEnd={handleCrossDragEnd}
+                  onCrossDrop={handleCrossDrop}
+                  sectionDropIndicator={sectionDropIndicator}
                 />
               )}
             </div>
@@ -1226,6 +1293,11 @@ interface CustomSurveyTabProps {
   onExpandSection: (id: string) => void
   onSave: () => Promise<void>
   onClose: () => void
+  crossDragState: CrossSectionDragState | null
+  onCrossDragStart: (state: CrossSectionDragState) => void
+  onCrossDragEnd: () => void
+  onCrossDrop: (targetSectionId: string, targetIndex: number) => void
+  sectionDropIndicator: SectionDropIndicator | null
 }
 
 function CustomSurveyTab({
@@ -1260,6 +1332,11 @@ function CustomSurveyTab({
   onExpandSection,
   onSave,
   onClose,
+  crossDragState,
+  onCrossDragStart,
+  onCrossDragEnd,
+  onCrossDrop,
+  sectionDropIndicator,
 }: CustomSurveyTabProps) {
   // Render rich text with formatting
   const renderRichText = (content: string | RichTextContent | undefined) => {
@@ -1350,7 +1427,7 @@ function CustomSurveyTab({
 
       {/* Survey Description - Rich Text */}
       <div>
-        <label htmlFor="custom-survey-description" className="block text-sm font-semibold text-gray-800 mb-2">
+        <label className="block text-sm font-semibold text-gray-800 mb-2">
           Form Description <span className="text-gray-400">(Optional)</span>
         </label>
         <RichTextEditor
@@ -1396,6 +1473,12 @@ function CustomSurveyTab({
               expandedQuestionId={expandedQuestionId}
               onExpandQuestion={onExpandQuestion}
               onChangeQuestionType={onChangeQuestionType}
+              crossDragState={crossDragState}
+              onCrossDragStart={onCrossDragStart}
+              onCrossDragEnd={onCrossDragEnd}
+              onCrossDrop={onCrossDrop}
+              sectionDropIndicator={sectionDropIndicator}
+              isSectionDragging={false}
             />
           ))}
         </div>

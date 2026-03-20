@@ -41,7 +41,9 @@ export default function RichTextEditor({
   name,
 }: RichTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editableRef = useRef<HTMLDivElement>(null)
   const savedSelection = useRef<Range | null>(null)
+  const isApplyingMark = useRef(false)
   const [text, setText] = useState(
     !value
       ? ''
@@ -52,6 +54,13 @@ export default function RichTextEditor({
   const [marks, setMarks] = useState<TextMark[]>(
     !value || typeof value === 'string' ? [] : value.marks || []
   )
+
+  // Sync text content to the contentEditable element
+  useEffect(() => {
+    if (editableRef.current && editableRef.current.innerHTML !== text && document.activeElement !== editableRef.current) {
+      editableRef.current.innerHTML = text
+    }
+  }, [text])
 
   const [, forceUpdate] = useState(0)
   const [activeMarks, setActiveMarks] = useState<Set<string>>(new Set())
@@ -74,11 +83,14 @@ export default function RichTextEditor({
 
   function handleTextChange(newHtml: string) {
     setText(newHtml)
-    onChange({ text: newHtml, marks: [] })
+    // Preserve marks when text changes - only update the text
+    onChange({ text: newHtml, marks })
   }
 
   function applyMark(type: Exclude<TextMark['type'], 'link'>) {
     const command = type === 'bold' ? 'bold' : type === 'italic' ? 'italic' : 'underline'
+    isApplyingMark.current = true
+    
     if (savedSelection.current) {
       const sel = window.getSelection()
       if (sel) {
@@ -87,12 +99,23 @@ export default function RichTextEditor({
       }
     }
     document.execCommand(command, false)
-    // Re-save selection after execCommand so it stays highlighted
-    const sel = window.getSelection()
-    if (sel && sel.rangeCount > 0) {
-      savedSelection.current = sel.getRangeAt(0).cloneRange()
+    
+    // Force focus back to element and capture the current formatting state
+    if (editableRef.current) {
+      editableRef.current.focus()
+      // Get the updated HTML after execCommand
+      const updatedHtml = editableRef.current.innerHTML
+      // Update local state
+      setText(updatedHtml)
+      // Immediately notify parent with the formatted content
+      onChange({ text: updatedHtml, marks })
     }
-    updateActiveMarks()
+    
+    // Update toolbar button states
+    setTimeout(() => {
+      updateActiveMarks()
+      isApplyingMark.current = false
+    }, 0)
   }
 
   function clearFormatting() {
@@ -127,6 +150,8 @@ export default function RichTextEditor({
       {/* Textarea */}
       <div className="relative">
         <div
+          ref={editableRef}
+          id={id}
           className={`w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 min-h-[${rows * 2}rem] bg-white ${className}`}
           contentEditable
           suppressContentEditableWarning
@@ -135,7 +160,11 @@ export default function RichTextEditor({
           onBlur={() => setIsFocused(false)}
           onInput={e => {
             const el = e.currentTarget
-            handleTextChange(el.innerHTML)
+            // Only update if we're not in the middle of applying a mark
+            if (!isApplyingMark.current) {
+              handleTextChange(el.innerHTML)
+            }
+            isApplyingMark.current = false
           }}
           onSelect={() => {
             const sel = window.getSelection()
@@ -154,11 +183,6 @@ export default function RichTextEditor({
           }}
           style={{
             minHeight: `${rows * 1.8}rem`,
-          }}
-          ref={el => {
-            if (el && el.innerHTML !== text && document.activeElement !== el) {
-              el.innerHTML = text
-            }
           }}
           onKeyDown={e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); applyMark('bold') }

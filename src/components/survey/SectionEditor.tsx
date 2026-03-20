@@ -515,7 +515,7 @@ export default function SectionEditor({
 
               {/* Section Description */}
               <div>
-                <label htmlFor={`sec-desc-${section.id}`} className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                   Section Description (Optional)
                 </label>
                 <p className="text-xs text-gray-500 mb-2">Instructions, context, or guidance for this section</p>
