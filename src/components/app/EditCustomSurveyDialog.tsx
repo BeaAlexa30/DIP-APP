@@ -11,6 +11,7 @@
  *   - Advanced question settings (required, scale config, etc.)
  *   - Cross-section drag-and-drop for questions
  *   - Validation with red borders on invalid fields
+ *   - Section drag-and-drop with above/below drop position indicators
  *
  * Cross-section D&D architecture:
  *   crossDragState is owned HERE and passed down to every SectionEditor.
@@ -18,6 +19,14 @@
  *   handleCrossDrop() splices the question out of the source section and
  *   inserts it at the correct position in the target section, then
  *   re-numbers all questions globally.
+ *
+ * Section D&D architecture:
+ *   - Each section wrapper div is made draggable via its handle.
+ *   - onDragOver compares cursor Y vs the target card's midpoint to
+ *     resolve 'above' | 'below' without any delay.
+ *   - sectionDropIndicator (targetSectionId + position) is passed to
+ *     every SectionEditor so it can render the animated DropPositionLine.
+ *   - isDraggingSection gates all unrelated hover styles.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
@@ -35,7 +44,10 @@ import {
   validateQuestion,
 } from '@/types/SurveyBuilder'
 import RichTextEditor from '@/components/survey/RichTextEditor'
-import SectionEditor, { CrossSectionDragState } from '@/components/survey/SectionEditor'
+import SectionEditor, {
+  CrossSectionDragState,
+  SectionDropIndicator,
+} from '@/components/survey/SectionEditor'
 import SkipLogicEditor from '@/components/survey/SkipLogicEditor'
 
 interface Props {
@@ -104,8 +116,16 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
   const [invalidQuestionIds, setInvalidQuestionIds] = useState<Set<string>>(new Set())
   const [invalidSectionIds, setInvalidSectionIds] = useState<Set<string>>(new Set())
 
-  // ── Cross-section drag state ──────────────────────────────────────────
+  // ── Cross-section (question) drag state ──────────────────────────────
   const [crossDragState, setCrossDragState] = useState<CrossSectionDragState | null>(null)
+
+  // ── Section-card drag state ───────────────────────────────────────────
+  const [draggingSectionIndex, setDraggingSectionIndex] = useState<number | null>(null)
+  const [sectionDropIndicator, setSectionDropIndicator] = useState<SectionDropIndicator | null>(null)
+  // Refs for each section card so we can read their DOMRects during dragOver
+  const sectionCardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  const isDraggingSection = draggingSectionIndex !== null
 
   // ── Auto-scroll during drag ───────────────────────────────────────────
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -142,17 +162,17 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
   }
 
   useEffect(() => {
-    if (!crossDragState) stopAutoScroll()
-  }, [crossDragState])
+    if (!crossDragState && !isDraggingSection) stopAutoScroll()
+  }, [crossDragState, isDraggingSection])
 
-   useEffect(() => () => stopAutoScroll(), [])
+  useEffect(() => () => stopAutoScroll(), [])
 
   // ── Enable scroll wheel during drag ──────────────────────────────────
   const isDraggingRef = useRef(false)
 
   useEffect(() => {
-    isDraggingRef.current = crossDragState !== null
-  }, [crossDragState])
+    isDraggingRef.current = crossDragState !== null || isDraggingSection
+  }, [crossDragState, isDraggingSection])
 
   useEffect(() => {
     function handleWheel(e: WheelEvent) {
@@ -198,15 +218,19 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     setInvalidQuestionIds(new Set())
     setInvalidSectionIds(new Set())
     setCrossDragState(null)
+    setDraggingSectionIndex(null)
+    setSectionDropIndicator(null)
     setIsOpen(true)
   }
 
   function handleClose() {
     setCrossDragState(null)
+    setDraggingSectionIndex(null)
+    setSectionDropIndicator(null)
     setIsOpen(false)
   }
 
-  // ── Cross-section drag handlers ───────────────────────────────────────
+  // ── Cross-section (question) drag handlers ────────────────────────────
 
   const handleCrossDragStart = useCallback((state: CrossSectionDragState) => {
     setCrossDragState(state)
@@ -230,7 +254,6 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
 
         return prev.map(section => {
           if (section.id === sourceSectionId && section.id === targetSectionId) {
-            // Same-section reorder
             const sourceIdx = section.questions.findIndex(q => q.id === questionId)
             if (sourceIdx === -1) return section
             const qs = [...section.questions]
@@ -260,6 +283,97 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     },
     [crossDragState],
   )
+
+  // ── Section-card drag handlers ────────────────────────────────────────
+
+  function handleSectionDragStart(e: React.DragEvent, index: number) {
+    // Only fire when the section handle triggered this (set by SectionEditor's onMouseDown)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('section-drag-index', String(index))
+    setDraggingSectionIndex(index)
+    isDraggingRef.current = true
+  }
+
+  function handleSectionDragEnd() {
+    setDraggingSectionIndex(null)
+    setSectionDropIndicator(null)
+    isDraggingRef.current = crossDragState !== null
+    stopAutoScroll()
+  }
+
+  /**
+   * Resolves above/below by comparing cursor Y to the target card's midpoint.
+   * Uses a stable-reference equality check to avoid redundant re-renders.
+   */
+  function handleSectionCardDragOver(
+    e: React.DragEvent,
+    targetSectionId: string,
+    targetIndex: number,
+  ) {
+    if (!isDraggingSection) return
+    // Only respond to section drags, not question drags
+    if (!e.dataTransfer.types.includes('section-drag-index')) return
+    if (targetIndex === draggingSectionIndex) {
+      // Hovering over self — clear indicator
+      setSectionDropIndicator(prev => (prev === null ? null : null))
+      return
+    }
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+
+    dragClientY.current = e.clientY
+    startAutoScroll()
+
+    const cardEl = sectionCardRefs.current.get(targetSectionId)
+    if (!cardEl) return
+    const rect = cardEl.getBoundingClientRect()
+    const position: 'above' | 'below' = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
+
+    setSectionDropIndicator(prev =>
+      prev?.targetSectionId === targetSectionId && prev?.position === position
+        ? prev   // identical — skip re-render
+        : { targetSectionId, position },
+    )
+  }
+
+  function handleSectionCardDragLeave(e: React.DragEvent, targetSectionId: string) {
+    const cardEl = sectionCardRefs.current.get(targetSectionId)
+    if (cardEl && cardEl.contains(e.relatedTarget as Node)) return
+    setSectionDropIndicator(prev =>
+      prev?.targetSectionId === targetSectionId ? null : prev,
+    )
+  }
+
+  function handleSectionCardDrop(e: React.DragEvent, targetIndex: number) {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const raw = e.dataTransfer.getData('section-drag-index')
+    if (!raw) return
+    const fromIndex = parseInt(raw, 10)
+    if (isNaN(fromIndex)) return
+
+    const indicator = sectionDropIndicator
+    setDraggingSectionIndex(null)
+    setSectionDropIndicator(null)
+    isDraggingRef.current = crossDragState !== null
+
+    if (fromIndex === targetIndex) return
+
+    setSections(prev => {
+      const arr = [...prev]
+      const [moved] = arr.splice(fromIndex, 1)
+
+      // Adjust insertion index after removal
+      let insertAt = targetIndex > fromIndex ? targetIndex - 1 : targetIndex
+      // If dropping 'below', shift one more
+      if (indicator?.position === 'below') insertAt = Math.min(insertAt + 1, arr.length)
+
+      arr.splice(insertAt, 0, moved)
+      return arr.map((s, i) => ({ ...s, order: i + 1 }))
+    })
+  }
 
   // ── Section CRUD ──────────────────────────────────────────────────────
 
@@ -594,6 +708,11 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                       ✦ Dragging question — drop into any section
                     </span>
                   )}
+                  {isDraggingSection && (
+                    <span className="ml-2 text-blue-500 font-medium animate-pulse">
+                      ✦ Dragging section — drop above or below another
+                    </span>
+                  )}
                 </p>
               </div>
               <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">
@@ -649,29 +768,16 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                       {sections.map((section, index) => (
                         <div
                           key={section.id}
+                          ref={el => {
+                            if (el) sectionCardRefs.current.set(section.id, el)
+                            else sectionCardRefs.current.delete(section.id)
+                          }}
                           draggable={false}
-                          onDragStart={e => {
-                            e.dataTransfer.setData('section-drag-index', String(index))
-                            isDraggingRef.current = true
-                          }}
-                          onDragOver={e => {
-                            if (e.dataTransfer.types.includes('section-drag-index')) {
-                              e.preventDefault()
-                            }
-                          }}
-                          onDrop={e => {
-                            isDraggingRef.current = false
-                            const raw = e.dataTransfer.getData('section-drag-index')
-                            if (!raw) return
-                            e.preventDefault()
-                            const fromIndex = parseInt(raw)
-                            if (isNaN(fromIndex) || fromIndex === index) return
-                            const reordered = [...sections]
-                            const [moved] = reordered.splice(fromIndex, 1)
-                            reordered.splice(index, 0, moved)
-                            setSections(reordered.map((s, i) => ({ ...s, order: i + 1 })))
-                          }}
-                          onDragEnd={() => { isDraggingRef.current = false }}
+                          onDragStart={e => handleSectionDragStart(e, index)}
+                          onDragEnd={handleSectionDragEnd}
+                          onDragOver={e => handleSectionCardDragOver(e, section.id, index)}
+                          onDragLeave={e => handleSectionCardDragLeave(e, section.id)}
+                          onDrop={e => handleSectionCardDrop(e, index)}
                         >
                           <SectionEditor
                             section={{ ...section, order: index + 1 }}
@@ -713,6 +819,8 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                             onCrossDragStart={handleCrossDragStart}
                             onCrossDragEnd={handleCrossDragEnd}
                             onCrossDrop={handleCrossDrop}
+                            isSectionDragging={isDraggingSection}
+                            sectionDropIndicator={sectionDropIndicator}
                           />
                         </div>
                       ))}
