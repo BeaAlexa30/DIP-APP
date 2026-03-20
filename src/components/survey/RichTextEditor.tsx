@@ -120,63 +120,9 @@ export default function RichTextEditor({
     return activeMarks.has(type)
   }
 
-<<<<<<< HEAD
     const [isFocused, setIsFocused] = useState(false)
 
    return (
-=======
-  // Helper: render text with formatting applied for preview
-  function renderPreview(): React.ReactNode {
-    if (!text) return <em className="text-gray-400">(empty)</em>
-    
-    // Sort marks by start position
-    const sortedMarks = [...marks].sort((a, b) => a.start - b.start)
-    const segments: Array<{ text: string; marks: TextMark[] }> = []
-    let lastEnd = 0
-
-    sortedMarks.forEach(mark => {
-      if (mark.start > lastEnd) {
-        segments.push({ text: text.substring(lastEnd, mark.start), marks: [] })
-      }
-      const markText = text.substring(mark.start, mark.end)
-      const existingSegment = segments.find(s => s.text === markText && s.marks.some(m => m.type === mark.type))
-      if (!existingSegment) {
-        segments.push({ text: markText, marks: [mark] })
-      }
-      lastEnd = mark.end
-    })
-
-    if (lastEnd < text.length) {
-      segments.push({ text: text.substring(lastEnd), marks: [] })
-    }
-
-    return (
-      <span>
-        {segments.map((seg, idx) => {
-          let element: React.ReactNode = seg.text
-          
-          seg.marks.forEach(mark => {
-            if (mark.type === 'bold') {
-              element = <strong key={`${idx}-bold`}>{element}</strong>
-            } else if (mark.type === 'italic') {
-              element = <em key={`${idx}-italic`}>{element}</em>
-            } else if (mark.type === 'underline') {
-              element = <u key={`${idx}-underline`}>{element}</u>
-            } else if (mark.type === 'strikethrough') {
-              element = <s key={`${idx}-strikethrough`}>{element}</s>
-            } else if (mark.type === 'link' && mark.url) {
-              element = <a key={`${idx}-link`} href={mark.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-700">{element}</a>
-            }
-          })
-          
-          return <span key={idx}>{element}</span>
-        })}
-      </span>
-    )
-  }
-
-  return (
->>>>>>> e05c6d9f7e1230c700f65601ed1a7e12beb6f486
     <div className="space-y-2">
       {/* Textarea */}
       <div className="relative">
@@ -222,7 +168,6 @@ export default function RichTextEditor({
         />
       </div>
 
-<<<<<<< HEAD
       {/* Toolbar - shown below input only when focused */}
       {isFocused && (
         <div className="flex flex-wrap gap-1 pl-2">
