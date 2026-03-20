@@ -72,9 +72,9 @@ export default function RichTextEditor({
     }
   }, [value])
 
-  function handleTextChange(newText: string) {
-    setText(newText)
-    onChange({ text: newText, marks })
+  function handleTextChange(newHtml: string) {
+    setText(newHtml)
+    onChange({ text: newHtml, marks: [] })
   }
 
   function applyMark(type: Exclude<TextMark['type'], 'link'>) {
@@ -120,47 +120,10 @@ export default function RichTextEditor({
     return activeMarks.has(type)
   }
 
-  return (
+    const [isFocused, setIsFocused] = useState(false)
+
+   return (
     <div className="space-y-2">
-      {/* Toolbar */}
-      <div className="flex flex-wrap gap-1 p-2 bg-gray-50 rounded-lg border border-gray-200">
-        <button
-          onMouseDown={e => { e.preventDefault(); applyMark('bold') }}
-          className={`px-3 py-1.5 text-sm font-bold rounded transition-colors ${
-            isMarkActive('bold')
-              ? 'bg-violet-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
-          }`}
-          title="Bold (Ctrl+B)"
-        >
-          B
-        </button>
-
-        <button
-          onMouseDown={e => { e.preventDefault(); applyMark('italic') }}
-          className={`px-3 py-1.5 text-sm italic rounded transition-colors ${
-            isMarkActive('italic')
-              ? 'bg-violet-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
-          }`}
-          title="Italic (Ctrl+I)"
-        >
-          I
-        </button>
-
-        <button
-          onMouseDown={e => { e.preventDefault(); applyMark('underline') }}
-          className={`px-3 py-1.5 text-sm underline rounded transition-colors ${
-            isMarkActive('underline')
-              ? 'bg-violet-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
-          }`}
-          title="Underline (Ctrl+U)"
-        >
-          U
-        </button>
-      </div>
-
       {/* Textarea */}
       <div className="relative">
         <div
@@ -168,9 +131,11 @@ export default function RichTextEditor({
           contentEditable
           suppressContentEditableWarning
           data-placeholder={placeholder}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           onInput={e => {
             const el = e.currentTarget
-            handleTextChange(el.innerText)
+            handleTextChange(el.innerHTML)
           }}
           onSelect={() => {
             const sel = window.getSelection()
@@ -191,8 +156,8 @@ export default function RichTextEditor({
             minHeight: `${rows * 1.8}rem`,
           }}
           ref={el => {
-            if (el && el.innerText !== text && document.activeElement !== el) {
-              el.innerText = text
+            if (el && el.innerHTML !== text && document.activeElement !== el) {
+              el.innerHTML = text
             }
           }}
           onKeyDown={e => {
@@ -203,6 +168,44 @@ export default function RichTextEditor({
         />
       </div>
 
+      {/* Toolbar - shown below input only when focused */}
+      {isFocused && (
+        <div className="flex flex-wrap gap-1 pl-2">
+          <button
+            onMouseDown={e => { e.preventDefault(); applyMark('bold') }}
+            className={`px-3 py-1.5 text-sm font-bold rounded transition-colors ${
+              isMarkActive('bold')
+                ? 'bg-violet-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+            }`}
+            title="Bold (Ctrl+B)"
+          >
+            B
+          </button>
+          <button
+            onMouseDown={e => { e.preventDefault(); applyMark('italic') }}
+            className={`px-3 py-1.5 text-sm italic rounded transition-colors ${
+              isMarkActive('italic')
+                ? 'bg-violet-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+            }`}
+            title="Italic (Ctrl+I)"
+          >
+            I
+          </button>
+          <button
+            onMouseDown={e => { e.preventDefault(); applyMark('underline') }}
+            className={`px-3 py-1.5 text-sm underline rounded transition-colors ${
+              isMarkActive('underline')
+                ? 'bg-violet-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+            }`}
+            title="Underline (Ctrl+U)"
+          >
+            U
+          </button>
+        </div>
+      )}
     </div>
   )
 }

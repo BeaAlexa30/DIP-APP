@@ -64,61 +64,11 @@ export default function SurveyFlow({
   const progress = ((currentSectionIndex) / sortedCategories.length) * 100
 
   // Render rich text content with formatting
-  const renderRichText = (content: string | RichTextContent | undefined | null) => {
+ const renderRichText = (content: string | RichTextContent | undefined | null) => {
     if (!content) return null
-    
-    const text = typeof content === 'string' ? content : content?.text
-    const marks = typeof content === 'object' && content.marks ? content.marks : []
-    
-    if (!marks || marks.length === 0) {
-      return text
-    }
-
-    // Sort marks by start position
-    const sortedMarks = [...marks].sort((a, b) => a.start - b.start)
-    const segments: Array<{ text: string; marks: any[] }> = []
-    let lastEnd = 0
-
-    sortedMarks.forEach(mark => {
-      if (mark.start > lastEnd) {
-        segments.push({ text: text.substring(lastEnd, mark.start), marks: [] })
-      }
-
-      const markText = text.substring(mark.start, mark.end)
-      const existingSegment = segments.find(s => s.text === markText && s.marks.some(m => m.type === mark.type))
-      if (!existingSegment) {
-        segments.push({ text: markText, marks: [mark] })
-      }
-      lastEnd = mark.end
-    })
-
-    if (lastEnd < text.length) {
-      segments.push({ text: text.substring(lastEnd), marks: [] })
-    }
-
-    return (
-      <span>
-        {segments.map((seg, idx) => {
-          let element: React.ReactNode = seg.text
-          
-          seg.marks.forEach(mark => {
-            if (mark.type === 'bold') {
-              element = <strong key={`${idx}-bold`}>{element}</strong>
-            } else if (mark.type === 'italic') {
-              element = <em key={`${idx}-italic`}>{element}</em>
-            } else if (mark.type === 'underline') {
-              element = <u key={`${idx}-underline`}>{element}</u>
-            } else if (mark.type === 'strikethrough') {
-              element = <s key={`${idx}-strikethrough`}>{element}</s>
-            } else if (mark.type === 'link' && mark.url) {
-              element = <a key={`${idx}-link`} href={mark.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-700">{element}</a>
-            }
-          })
-          
-          return <span key={idx}>{element}</span>
-        })}
-      </span>
-    )
+    const html = typeof content === 'string' ? content : content?.text || ''
+    if (!html) return null
+    return <span dangerouslySetInnerHTML={{ __html: html }} />
   }
 
   // Get text from description (handles RichTextContent)
@@ -234,7 +184,7 @@ export default function SurveyFlow({
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-sm font-medium text-gray-700">{snapshot.packName}</p>
+              <p className="text-3xl font-medium text-gray-700">{snapshot.packName}</p>
               <p className="text-xs text-gray-400">Section {currentSectionIndex + 1} of {sortedCategories.length}</p>
             </div>
             <p className="text-xs text-gray-400">{Math.round(progress)}% complete</p>
@@ -242,7 +192,7 @@ export default function SurveyFlow({
           
           {/* Form description - shown on first section */}
           {currentSectionIndex === 0 && snapshot.description && (
-            <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 whitespace-pre-wrap">
+            <div className="mb-3 pl-4 text-sm text-gray-600">
               {renderRichText(snapshot.description)}
             </div>
           )}
@@ -271,7 +221,7 @@ export default function SurveyFlow({
                 
                 {/* Section description */}
                 {currentSection.description && (
-                  <div className="mb-4 p-4 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-800 whitespace-pre-wrap font-medium">
+                  <div className="mb-4 pl-4 rounded-lg text-sm text-gray-800 whitespace-pre-wrap font-medium">
                     {renderRichText(currentSection.description)}
                   </div>
                 )}
