@@ -11,7 +11,7 @@
  *   - Improved UI with collapsible question blocks
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
 import {
@@ -26,7 +26,10 @@ import {
   validateQuestion,
 } from '@/types/SurveyBuilder'
 import RichTextEditor from '@/components/survey/RichTextEditor'
-import SectionEditor from '@/components/survey/SectionEditor'
+import SectionEditor, {
+  CrossSectionDragState,
+  SectionDropIndicator,
+} from '@/components/survey/SectionEditor'
 import SkipLogicEditor from '@/components/survey/SkipLogicEditor'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -109,11 +112,91 @@ export default function AddOrGenerateSurveyDialog({
   const [customSurveyTitle, setCustomSurveyTitle] = useState('')
   const [customSurveyDescription, setCustomSurveyDescription] = useState<RichTextContent | undefined>()
   const [customSections, setCustomSections] = useState<SurveyCategory[]>([])
-  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null)
-  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
+  const [expandedQuestionIds, setExpandedQuestionIds] = useState<Set<string>>(new Set())
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set())
   const [customSaving, setCustomSaving] = useState(false)
   const [customError, setCustomError] = useState<string | null>(null)
   const [customSuccess, setCustomSuccess] = useState(false)
+  const [invalidQuestionIds, setInvalidQuestionIds] = useState<Set<string>>(new Set())
+  const [invalidSectionIds, setInvalidSectionIds] = useState<Set<string>>(new Set())
+
+  // ── Cross-section (question) drag state ──────────────────────────────
+  const [crossDragState, setCrossDragState] = useState<CrossSectionDragState | null>(null)
+
+  // ── Section-card drag state ───────────────────────────────────────────
+  const [draggingSectionIndex, setDraggingSectionIndex] = useState<number | null>(null)
+  const [sectionDropIndicator, setSectionDropIndicator] = useState<SectionDropIndicator | null>(null)
+  const sectionCardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  const isDraggingSection = draggingSectionIndex !== null
+
+  // ── Auto-scroll during drag ───────────────────────────────────────────
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const dragClientY = useRef<number>(0)
+  const scrollRafRef = useRef<number | null>(null)
+  const isDraggingRef = useRef(false)
+
+  useEffect(() => {
+    isDraggingRef.current = crossDragState !== null || isDraggingSection
+  }, [crossDragState, isDraggingSection])
+
+  function runAutoScroll() {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const y = dragClientY.current
+    const ZONE = 80
+    const MAX_SPEED = 18
+    let speed = 0
+    if (y < rect.top + ZONE && y > rect.top) {
+      speed = -MAX_SPEED * (1 - (y - rect.top) / ZONE)
+    } else if (y > rect.bottom - ZONE && y < rect.bottom) {
+      speed = MAX_SPEED * (1 - (rect.bottom - y) / ZONE)
+    }
+    if (speed !== 0) el.scrollBy({ top: speed })
+    scrollRafRef.current = requestAnimationFrame(runAutoScroll)
+  }
+
+  function startAutoScroll() {
+    if (scrollRafRef.current !== null) return
+    scrollRafRef.current = requestAnimationFrame(runAutoScroll)
+  }
+
+  function stopAutoScroll() {
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current)
+      scrollRafRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    if (!crossDragState && !isDraggingSection) stopAutoScroll()
+  }, [crossDragState, isDraggingSection])
+
+  useEffect(() => () => stopAutoScroll(), [])
+
+  useEffect(() => {
+    function handleWheel(e: WheelEvent) {
+      if (!isDraggingRef.current) return
+      const el = scrollContainerRef.current
+      if (!el) return
+      e.preventDefault()
+      e.stopPropagation()
+      el.scrollTop += e.deltaY
+    }
+
+    window.addEventListener('wheel', handleWheel, { passive: false, capture: true })
+    return () => window.removeEventListener('wheel', handleWheel, { capture: true })
+  }, [])
+
+  function handleScrollContainerDragOver(e: React.DragEvent) {
+    dragClientY.current = e.clientY
+    startAutoScroll()
+  }
+
+  function handleScrollContainerDragLeave() {
+    stopAutoScroll()
+  }
 
   const availablePacks = packs.filter(p =>
     !existingPackIds.includes(p.id) && !addedPackIds.has(p.id)
@@ -272,8 +355,8 @@ export default function AddOrGenerateSurveyDialog({
       const newQuestion = createQuestion(type)
       newSection.questions = [newQuestion]
       setCustomSections(prev => [...prev, newSection])
-      setExpandedQuestionId(newQuestion.id)
-      setExpandedSectionId(newSection.id)
+      setExpandedQuestionIds(prev => new Set(prev).add(newQuestion.id))
+      setExpandedSectionIds(prev => new Set(prev).add(newSection.id))
       return
     }
     
@@ -285,8 +368,8 @@ export default function AddOrGenerateSurveyDialog({
           : s
       )
     )
-    setExpandedQuestionId(newQuestion.id)
-    setExpandedSectionId(sectionId)
+    setExpandedQuestionIds(prev => new Set(prev).add(newQuestion.id))
+    setExpandedSectionIds(prev => new Set(prev).add(sectionId))
   }
 
   function removeQuestion(id: string) {
@@ -296,7 +379,7 @@ export default function AddOrGenerateSurveyDialog({
         questions: (s.questions || []).filter(q => q.id !== id)
       }))
     )
-    if (expandedQuestionId === id) setExpandedQuestionId(null)
+    setExpandedQuestionIds(prev => { const next = new Set(prev); next.delete(id); return next })
   }
 
   function duplicateQuestion(id: string) {
@@ -317,7 +400,7 @@ export default function AddOrGenerateSurveyDialog({
         
         const newQuestions = [...(s.questions || [])]
         newQuestions.splice(qIdx + 1, 0, duplicate)
-        setExpandedQuestionId(duplicate.id)
+        setExpandedQuestionIds(prev => new Set(prev).add(duplicate.id))
         return { ...s, questions: newQuestions }
       })
     )
@@ -490,12 +573,12 @@ export default function AddOrGenerateSurveyDialog({
       collapsedByDefault: false,
     }
     setCustomSections(prev => [...prev, newSection])
-    setExpandedSectionId(newSection.id)
+    setExpandedSectionIds(prev => new Set(prev).add(newSection.id))
   }
 
   function removeSection(id: string) {
     setCustomSections(prev => prev.filter(s => s.id !== id))
-    if (expandedSectionId === id) setExpandedSectionId(null)
+    setExpandedSectionIds(prev => { const next = new Set(prev); next.delete(id); return next })
   }
 
   function updateSection(id: string, updates: Partial<SurveyCategory>) {
@@ -522,6 +605,142 @@ export default function AddOrGenerateSurveyDialog({
     })
   }
 
+  // ── Cross-section (question) drag handlers ────────────────────────────
+
+  const handleCrossDragStart = useCallback((state: CrossSectionDragState) => {
+    setCrossDragState(state)
+  }, [])
+
+  const handleCrossDragEnd = useCallback(() => {
+    setCrossDragState(null)
+  }, [])
+
+  const handleCrossDrop = useCallback(
+    (targetSectionId: string, targetIndex: number) => {
+      if (!crossDragState) return
+      const { sourceSectionId, questionId } = crossDragState
+      setCrossDragState(null)
+
+      setCustomSections(prev => {
+        const sourceSection = prev.find(s => s.id === sourceSectionId)
+        if (!sourceSection) return prev
+        const questionToMove = sourceSection.questions.find(q => q.id === questionId)
+        if (!questionToMove) return prev
+
+        return prev.map(section => {
+          if (section.id === sourceSectionId && section.id === targetSectionId) {
+            const sourceIdx = section.questions.findIndex(q => q.id === questionId)
+            if (sourceIdx === -1) return section
+            const qs = [...section.questions]
+            qs.splice(sourceIdx, 1)
+            const insertAt = targetIndex > sourceIdx
+              ? Math.min(targetIndex - 1, qs.length)
+              : Math.min(targetIndex, qs.length)
+            qs.splice(insertAt, 0, questionToMove)
+            return { ...section, questions: qs.map((q, i) => ({ ...q, order: i + 1 })) }
+          }
+          if (section.id === sourceSectionId) {
+            return {
+              ...section,
+              questions: section.questions
+                .filter(q => q.id !== questionId)
+                .map((q, i) => ({ ...q, order: i + 1 })),
+            }
+          }
+          if (section.id === targetSectionId) {
+            const qs = [...section.questions]
+            qs.splice(Math.min(targetIndex, qs.length), 0, questionToMove)
+            return { ...section, questions: qs.map((q, i) => ({ ...q, order: i + 1 })) }
+          }
+          return section
+        })
+      })
+    },
+    [crossDragState],
+  )
+
+  // ── Section-card drag handlers ────────────────────────────────────────
+
+  function handleSectionDragStart(e: React.DragEvent, index: number) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('section-drag-index', String(index))
+    setDraggingSectionIndex(index)
+    isDraggingRef.current = true
+  }
+
+  function handleSectionDragEnd() {
+    setDraggingSectionIndex(null)
+    setSectionDropIndicator(null)
+    isDraggingRef.current = crossDragState !== null
+    stopAutoScroll()
+  }
+
+  function handleSectionCardDragOver(
+    e: React.DragEvent,
+    targetSectionId: string,
+    targetIndex: number,
+  ) {
+    if (!isDraggingSection) return
+    if (!e.dataTransfer.types.includes('section-drag-index')) return
+    if (targetIndex === draggingSectionIndex) {
+      setSectionDropIndicator(prev => (prev === null ? null : null))
+      return
+    }
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+
+    dragClientY.current = e.clientY
+    startAutoScroll()
+
+    const cardEl = sectionCardRefs.current.get(targetSectionId)
+    if (!cardEl) return
+    const rect = cardEl.getBoundingClientRect()
+    const position: 'above' | 'below' = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
+
+    setSectionDropIndicator(prev =>
+      prev?.targetSectionId === targetSectionId && prev?.position === position
+        ? prev
+        : { targetSectionId, position },
+    )
+  }
+
+  function handleSectionCardDragLeave(e: React.DragEvent, targetSectionId: string) {
+    const cardEl = sectionCardRefs.current.get(targetSectionId)
+    if (cardEl && cardEl.contains(e.relatedTarget as Node)) return
+    setSectionDropIndicator(prev =>
+      prev?.targetSectionId === targetSectionId ? null : prev,
+    )
+  }
+
+  function handleSectionCardDrop(e: React.DragEvent, targetIndex: number) {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const raw = e.dataTransfer.getData('section-drag-index')
+    if (!raw) return
+    const fromIndex = parseInt(raw, 10)
+    if (isNaN(fromIndex)) return
+
+    const indicator = sectionDropIndicator
+    setDraggingSectionIndex(null)
+    setSectionDropIndicator(null)
+    isDraggingRef.current = crossDragState !== null
+
+    if (fromIndex === targetIndex) return
+
+    setCustomSections(prev => {
+      const arr = [...prev]
+      const [moved] = arr.splice(fromIndex, 1)
+
+      let insertAt = targetIndex > fromIndex ? targetIndex - 1 : targetIndex
+      if (indicator?.position === 'below') insertAt = Math.min(insertAt + 1, arr.length)
+
+      arr.splice(insertAt, 0, moved)
+      return arr.map((s, i) => ({ ...s, order: i + 1 }))
+    })
+  }
+
   async function handleSaveCustomSurvey() {
     // Validation - check for at least one question across all sections
     const totalQuestions = customSections.reduce((sum, s) => sum + (s.questions?.length || 0), 0)
@@ -530,13 +749,34 @@ export default function AddOrGenerateSurveyDialog({
       return
     }
 
-    const validationErrors = customSections.flatMap(s => 
-      (s.questions || []).flatMap(q => validateQuestion(q))
-    )
-    if (validationErrors.length > 0) {
-      setCustomError(
-        `Validation errors:\n${validationErrors.map((e: any) => `- ${e.message}`).join('\n')}`
+    // Validate questions and collect invalid IDs
+    const invalidIds = new Set(
+      customSections.flatMap(s =>
+        (s.questions || []).filter(q => validateQuestion(q).length > 0).map(q => q.id)
       )
+    )
+    // Validate sections (empty names)
+    const emptySectionIds = new Set(
+      customSections.filter(s => !s.name?.trim()).map(s => s.id)
+    )
+    // Get sections with question errors
+    const sectionsWithQuestionErrors = customSections.filter(s =>
+      (s.questions || []).some(q => invalidIds.has(q.id))
+    )
+    // All sections to expand
+    const allSectionsToExpand = new Set([
+      ...emptySectionIds,
+      ...sectionsWithQuestionErrors.map(s => s.id),
+    ])
+
+    if (emptySectionIds.size > 0 || invalidIds.size > 0) {
+      if (emptySectionIds.size > 0) setInvalidSectionIds(emptySectionIds)
+      if (invalidIds.size > 0) {
+        setInvalidQuestionIds(invalidIds)
+        setExpandedQuestionIds(new Set(invalidIds))
+      }
+      setExpandedSectionIds(allSectionsToExpand)
+      setCustomError('Please fill up the required fields.')
       return
     }
 
@@ -606,6 +846,28 @@ export default function AddOrGenerateSurveyDialog({
     }
   }
 
+  // Helper functions for expanded state (single-value compatibility)
+  function setExpandedQuestionId(id: string | null) {
+    setExpandedQuestionIds(prev => {
+      const next = new Set(prev)
+      if (id === null) next.clear()
+      else next.add(id)
+      return next
+    })
+  }
+
+  function setExpandedSectionId(id: string | null) {
+    setExpandedSectionIds(prev => {
+      const next = new Set(prev)
+      if (id === null) next.clear()
+      else next.add(id)
+      return next
+    })
+  }
+
+  const expandedQuestionId = Array.from(expandedQuestionIds)[0] || null
+  const expandedSectionId = Array.from(expandedSectionIds)[0] || null
+
   // ── Open/close ─────────────────────────────────────────────────────────────
   function handleOpen() {
     setIsOpen(true)
@@ -628,8 +890,8 @@ export default function AddOrGenerateSurveyDialog({
       sectionButtons: [],
       collapsedByDefault: false,
     }])
-    setExpandedQuestionId(null)
-    setExpandedSectionId(null)
+    setExpandedQuestionIds(new Set())
+    setExpandedSectionIds(new Set())
     setCustomSaving(false)
     setCustomError(null)
     setCustomSuccess(false)
@@ -751,6 +1013,14 @@ export default function AddOrGenerateSurveyDialog({
                   customError={customError}
                   customSaving={customSaving}
                   customSuccess={customSuccess}
+                  invalidQuestionIds={invalidQuestionIds}
+                  invalidSectionIds={invalidSectionIds}
+                  crossDragState={crossDragState}
+                  onCrossDragStart={handleCrossDragStart}
+                  onCrossDragEnd={handleCrossDragEnd}
+                  onCrossDrop={handleCrossDrop}
+                  isDraggingSection={isDraggingSection}
+                  sectionDropIndicator={sectionDropIndicator}
                   onTitleChange={setCustomSurveyTitle}
                   onDescriptionChange={setCustomSurveyDescription}
                   onAddQuestion={addNewQuestion}
@@ -774,6 +1044,12 @@ export default function AddOrGenerateSurveyDialog({
                   onExpandSection={(id: string) => setExpandedSectionId(id === expandedSectionId ? null : id)}
                   onSave={handleSaveCustomSurvey}
                   onClose={handleClose}
+                  onSectionDragStart={handleSectionDragStart}
+                  onSectionDragEnd={handleSectionDragEnd}
+                  onSectionCardDragOver={handleSectionCardDragOver}
+                  onSectionCardDragLeave={handleSectionCardDragLeave}
+                  onSectionCardDrop={handleSectionCardDrop}
+                  sectionCardRefs={sectionCardRefs}
                 />
               )}
             </div>
@@ -1203,6 +1479,14 @@ interface CustomSurveyTabProps {
   customError: string | null
   customSaving: boolean
   customSuccess: boolean
+  invalidQuestionIds: Set<string>
+  invalidSectionIds: Set<string>
+  crossDragState: CrossSectionDragState | null
+  onCrossDragStart: (state: CrossSectionDragState) => void
+  onCrossDragEnd: () => void
+  onCrossDrop: (targetSectionId: string, targetIndex: number) => void
+  isDraggingSection: boolean
+  sectionDropIndicator: SectionDropIndicator | null
   onTitleChange: (value: string) => void
   onDescriptionChange: (value: RichTextContent) => void
   onAddQuestion: (sectionId: string, type: QuestionType) => void
@@ -1226,6 +1510,12 @@ interface CustomSurveyTabProps {
   onExpandSection: (id: string) => void
   onSave: () => Promise<void>
   onClose: () => void
+  onSectionDragStart: (e: React.DragEvent, index: number) => void
+  onSectionDragEnd: () => void
+  onSectionCardDragOver: (e: React.DragEvent, targetSectionId: string, targetIndex: number) => void
+  onSectionCardDragLeave: (e: React.DragEvent, targetSectionId: string) => void
+  onSectionCardDrop: (e: React.DragEvent, targetIndex: number) => void
+  sectionCardRefs: React.MutableRefObject<Map<string, HTMLDivElement>>
 }
 
 function CustomSurveyTab({
@@ -1237,6 +1527,14 @@ function CustomSurveyTab({
   customError,
   customSaving,
   customSuccess,
+  invalidQuestionIds,
+  invalidSectionIds,
+  crossDragState,
+  onCrossDragStart,
+  onCrossDragEnd,
+  onCrossDrop,
+  isDraggingSection,
+  sectionDropIndicator,
   onTitleChange,
   onDescriptionChange,
   onAddQuestion,
@@ -1260,6 +1558,12 @@ function CustomSurveyTab({
   onExpandSection,
   onSave,
   onClose,
+  onSectionDragStart,
+  onSectionDragEnd,
+  onSectionCardDragOver,
+  onSectionCardDragLeave,
+  onSectionCardDrop,
+  sectionCardRefs,
 }: CustomSurveyTabProps) {
   // Render rich text with formatting
   const renderRichText = (content: string | RichTextContent | undefined) => {
@@ -1370,33 +1674,54 @@ function CustomSurveyTab({
             Sections ({customSections.length})
           </p>
           {customSections.map((section, index) => (
-            <SectionEditor
+            <div
               key={section.id}
-              section={{
-                ...section,
-                order: index + 1,
+              ref={el => {
+                if (el) sectionCardRefs.current.set(section.id, el)
+                else sectionCardRefs.current.delete(section.id)
               }}
-              allSections={customSections}
-              isExpanded={expandedSectionId === section.id}
-              onExpand={() => onExpandSection(section.id)}
-              onUpdate={(updates) => onUpdateSection(section.id, updates)}
-              onRemove={() => onRemoveSection(section.id)}
-              onMoveUp={() => onMoveSectionUp(index)}
-              onMoveDown={() => onMoveSectionDown(index)}
-              canMoveUp={index > 0}
-              canMoveDown={index < customSections.length - 1}
-              onAddQuestion={(sectionId, type) => onAddQuestion(sectionId, type as QuestionType)}
-              onRemoveQuestion={(sectionId, qId) => onRemoveQuestion(qId)}
-              onUpdateQuestion={(sectionId, qId, updates) => onUpdateQuestion(qId, updates)}
-              onAddOption={onAddOption}
-              onRemoveOption={onRemoveOption}
-              onUpdateOption={onUpdateOption}
-              onMoveOptionUp={onMoveOptionUp}
-              onMoveOptionDown={onMoveOptionDown}
-              expandedQuestionId={expandedQuestionId}
-              onExpandQuestion={onExpandQuestion}
-              onChangeQuestionType={onChangeQuestionType}
-            />
+              draggable={false}
+              onDragStart={e => onSectionDragStart(e, index)}
+              onDragEnd={onSectionDragEnd}
+              onDragOver={e => onSectionCardDragOver(e, section.id, index)}
+              onDragLeave={e => onSectionCardDragLeave(e, section.id)}
+              onDrop={e => onSectionCardDrop(e, index)}
+            >
+              <SectionEditor
+                section={{
+                  ...section,
+                  order: index + 1,
+                }}
+                allSections={customSections}
+                isExpanded={expandedSectionId === section.id}
+                onExpand={() => onExpandSection(section.id)}
+                onUpdate={(updates) => onUpdateSection(section.id, updates)}
+                onRemove={() => onRemoveSection(section.id)}
+                onMoveUp={() => onMoveSectionUp(index)}
+                onMoveDown={() => onMoveSectionDown(index)}
+                canMoveUp={index > 0}
+                canMoveDown={index < customSections.length - 1}
+                onAddQuestion={(sectionId, type) => onAddQuestion(sectionId, type as QuestionType)}
+                onRemoveQuestion={(sectionId, qId) => onRemoveQuestion(qId)}
+                onUpdateQuestion={(sectionId, qId, updates) => onUpdateQuestion(qId, updates)}
+                onAddOption={onAddOption}
+                onRemoveOption={onRemoveOption}
+                onUpdateOption={onUpdateOption}
+                onMoveOptionUp={onMoveOptionUp}
+                onMoveOptionDown={onMoveOptionDown}
+                expandedQuestionId={expandedQuestionId}
+                onExpandQuestion={onExpandQuestion}
+                onChangeQuestionType={onChangeQuestionType}
+                invalidQuestionIds={invalidQuestionIds}
+                invalidSectionIds={invalidSectionIds}
+                crossDragState={crossDragState}
+                onCrossDragStart={onCrossDragStart}
+                onCrossDragEnd={onCrossDragEnd}
+                onCrossDrop={onCrossDrop}
+                sectionDropIndicator={sectionDropIndicator}
+                isSectionDragging={isDraggingSection}
+              />
+            </div>
           ))}
         </div>
       )}
