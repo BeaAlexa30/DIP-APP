@@ -9,9 +9,17 @@
  *   - Duplicate and delete per question
  *   - Full option management with drag-and-drop via arrow keys
  *   - Advanced question settings (required, scale config, etc.)
+ *   - Cross-section drag-and-drop for questions
+ *
+ * Cross-section D&D architecture:
+ *   crossDragState is owned HERE and passed down to every SectionEditor.
+ *   SectionEditor calls onCrossDragStart / onCrossDragEnd / onCrossDrop.
+ *   handleCrossDrop() splices the question out of the source section and
+ *   inserts it at the correct position in the target section, then
+ *   re-numbers all questions globally.
  */
 
-import { useState } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/DatabaseClientManager'
 import {
@@ -26,7 +34,7 @@ import {
   validateQuestion,
 } from '@/types/SurveyBuilder'
 import RichTextEditor from '@/components/survey/RichTextEditor'
-import SectionEditor from '@/components/survey/SectionEditor'
+import SectionEditor, { CrossSectionDragState } from '@/components/survey/SectionEditor'
 import SkipLogicEditor from '@/components/survey/SkipLogicEditor'
 
 interface Props {
@@ -43,7 +51,6 @@ function parseQuestionsFromSnapshot(snapshot: SurveySnapshot): Question[] {
   const raw: any[] = allCats.flatMap((c: any) => c.questions ?? [])
 
   return raw.map((q: any) => {
-    // Normalize legacy type names
     let type: QuestionType = q.type as QuestionType
     if ((type as string) === 'single_select') type = 'multiple_choice'
     if ((type as string) === 'scale') type = 'linear_scale'
@@ -101,6 +108,61 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
+  // ── Cross-section drag state ──────────────────────────────────────────
+  const [crossDragState, setCrossDragState] = useState<CrossSectionDragState | null>(null)
+
+  // ── Auto-scroll during drag ───────────────────────────────────────────
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const dragClientY = useRef<number>(0)
+  const scrollRafRef = useRef<number | null>(null)
+
+  function runAutoScroll() {
+    const el = scrollContainerRef.current
+    if (!el) return
+
+    const rect = el.getBoundingClientRect()
+    const y = dragClientY.current
+    const ZONE = 80      // px from edge that activates scrolling
+    const MAX_SPEED = 18 // px/frame at the very edge
+
+    let speed = 0
+    if (y < rect.top + ZONE && y > rect.top) {
+      speed = -MAX_SPEED * (1 - (y - rect.top) / ZONE)
+    } else if (y > rect.bottom - ZONE && y < rect.bottom) {
+      speed = MAX_SPEED * (1 - (rect.bottom - y) / ZONE)
+    }
+
+    if (speed !== 0) el.scrollBy({ top: speed })
+    scrollRafRef.current = requestAnimationFrame(runAutoScroll)
+  }
+
+  function startAutoScroll() {
+    if (scrollRafRef.current !== null) return
+    scrollRafRef.current = requestAnimationFrame(runAutoScroll)
+  }
+
+  function stopAutoScroll() {
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current)
+      scrollRafRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    if (!crossDragState) stopAutoScroll()
+  }, [crossDragState])
+
+  useEffect(() => () => stopAutoScroll(), [])
+
+  function handleScrollContainerDragOver(e: React.DragEvent) {
+    dragClientY.current = e.clientY
+    startAutoScroll()
+  }
+
+  function handleScrollContainerDragLeave() {
+    stopAutoScroll()
+  }
+
   function handleOpen() {
     setTitle(snapshot?.packName ?? '')
     const desc = snapshot?.description
@@ -117,70 +179,124 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     setSaving(false)
     setError(null)
     setSuccess(false)
+    setCrossDragState(null)
     setIsOpen(true)
   }
 
   function handleClose() {
+    setCrossDragState(null)
     setIsOpen(false)
   }
 
-  // Render rich text with formatting
+  // ── Cross-section drag handlers ───────────────────────────────────────
+
+  const handleCrossDragStart = useCallback((state: CrossSectionDragState) => {
+    setCrossDragState(state)
+  }, [])
+
+  const handleCrossDragEnd = useCallback(() => {
+    setCrossDragState(null)
+  }, [])
+
+  /**
+   * Core cross-section drop logic.
+   * Removes the dragged question from its source section and inserts
+   * it at `targetIndex` in `targetSectionId`.  Re-numbers all questions
+   * within each section afterwards.
+   */
+  const handleCrossDrop = useCallback(
+    (targetSectionId: string, targetIndex: number) => {
+      if (!crossDragState) return
+
+      const { sourceSectionId, questionId } = crossDragState
+      setCrossDragState(null)
+
+      setSections(prev => {
+        // ── 1. Find the question being moved ──────────────────────────
+        const sourceSection = prev.find(s => s.id === sourceSectionId)
+        if (!sourceSection) return prev
+        const questionToMove = sourceSection.questions.find(q => q.id === questionId)
+        if (!questionToMove) return prev
+
+        // ── 2. Build new sections array ───────────────────────────────
+        return prev.map(section => {
+          if (section.id === sourceSectionId && section.id === targetSectionId) {
+            // ── Same-section reorder ──────────────────────────────────
+            const sourceIdx = section.questions.findIndex(q => q.id === questionId)
+            if (sourceIdx === -1) return section
+            const qs = [...section.questions]
+            qs.splice(sourceIdx, 1)
+            // After removal, slots shift by -1 for everything after sourceIdx
+            const insertAt = targetIndex > sourceIdx
+              ? Math.min(targetIndex - 1, qs.length)
+              : Math.min(targetIndex, qs.length)
+            qs.splice(insertAt, 0, questionToMove)
+            return { ...section, questions: qs.map((q, i) => ({ ...q, order: i + 1 })) }
+          }
+
+          if (section.id === sourceSectionId) {
+            // Remove from source
+            return {
+              ...section,
+              questions: section.questions
+                .filter(q => q.id !== questionId)
+                .map((q, i) => ({ ...q, order: i + 1 })),
+            }
+          }
+
+          if (section.id === targetSectionId) {
+            // Insert into target at the specified index
+            const qs = [...section.questions]
+            qs.splice(Math.min(targetIndex, qs.length), 0, questionToMove)
+            return { ...section, questions: qs.map((q, i) => ({ ...q, order: i + 1 })) }
+          }
+
+          return section
+        })
+      })
+    },
+    [crossDragState],
+  )
+
+  // Render rich text
   const renderRichText = (content: string | RichTextContent | undefined) => {
     if (!content) return null
-    
     const text = typeof content === 'string' ? content : content?.text || ''
     const marks = typeof content === 'object' && content.marks ? content.marks : []
-    
-    if (!marks || marks.length === 0) {
-      return text
-    }
+    if (!marks || marks.length === 0) return text
 
-    // Sort marks by start position
     const sortedMarks = [...marks].sort((a, b) => a.start - b.start)
     const segments: Array<{ text: string; marks: any[] }> = []
     let lastEnd = 0
 
     sortedMarks.forEach(mark => {
-      if (mark.start > lastEnd) {
-        segments.push({ text: text.substring(lastEnd, mark.start), marks: [] })
-      }
-
+      if (mark.start > lastEnd) segments.push({ text: text.substring(lastEnd, mark.start), marks: [] })
       const markText = text.substring(mark.start, mark.end)
       const existingSegment = segments.find(s => s.text === markText && s.marks.some(m => m.type === mark.type))
-      if (!existingSegment) {
-        segments.push({ text: markText, marks: [mark] })
-      }
+      if (!existingSegment) segments.push({ text: markText, marks: [mark] })
       lastEnd = mark.end
     })
-
-    if (lastEnd < text.length) {
-      segments.push({ text: text.substring(lastEnd), marks: [] })
-    }
+    if (lastEnd < text.length) segments.push({ text: text.substring(lastEnd), marks: [] })
 
     return (
       <span>
         {segments.map((seg, idx) => {
           let element: React.ReactNode = seg.text
-          
           seg.marks.forEach(mark => {
-            if (mark.type === 'bold') {
-              element = <strong key={`${idx}-bold`}>{element}</strong>
-            } else if (mark.type === 'italic') {
-              element = <em key={`${idx}-italic`}>{element}</em>
-            } else if (mark.type === 'underline') {
-              element = <u key={`${idx}-underline`}>{element}</u>
-            } else if (mark.type === 'strikethrough') {
-              element = <s key={`${idx}-strikethrough`}>{element}</s>
-            } else if (mark.type === 'link' && mark.url) {
+            if (mark.type === 'bold') element = <strong key={`${idx}-bold`}>{element}</strong>
+            else if (mark.type === 'italic') element = <em key={`${idx}-italic`}>{element}</em>
+            else if (mark.type === 'underline') element = <u key={`${idx}-underline`}>{element}</u>
+            else if (mark.type === 'strikethrough') element = <s key={`${idx}-s`}>{element}</s>
+            else if (mark.type === 'link' && mark.url)
               element = <a key={`${idx}-link`} href={mark.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{element}</a>
-            }
           })
-          
           return <span key={idx}>{element}</span>
         })}
       </span>
     )
   }
+
+  // ── Section CRUD ──────────────────────────────────────────────────────
 
   function addNewSection() {
     const newSection: SurveyCategory = {
@@ -200,9 +316,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
   }
 
   function updateSection(id: string, updates: Partial<SurveyCategory>) {
-    setSections(prev =>
-      prev.map(s => (s.id === id ? { ...s, ...updates } : s))
-    )
+    setSections(prev => prev.map(s => (s.id === id ? { ...s, ...updates } : s)))
   }
 
   function moveSectionUp(index: number) {
@@ -223,9 +337,10 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     })
   }
 
+  // ── Question CRUD ─────────────────────────────────────────────────────
+
   function addNewQuestion(sectionId: string, type: QuestionType) {
     const newQuestion = createQuestion(type)
-
     setSections(prev =>
       prev.map(s =>
         s.id === sectionId
@@ -233,7 +348,6 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
           : s
       )
     )
-
     setExpandedQuestionId(newQuestion.id)
     setExpandedSectionId(sectionId)
   }
@@ -242,7 +356,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     setSections(prev =>
       prev.map(s => ({
         ...s,
-        questions: (s.questions || []).filter(q => q.id !== id)
+        questions: (s.questions || []).filter(q => q.id !== id),
       }))
     )
     if (expandedQuestionId === id) setExpandedQuestionId(null)
@@ -252,7 +366,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     setSections(prev =>
       prev.map(s => ({
         ...s,
-        questions: (s.questions || []).map(q => (q.id === id ? { ...q, ...updates } : q))
+        questions: (s.questions || []).map(q => (q.id === id ? { ...q, ...updates } : q)),
       }))
     )
   }
@@ -273,13 +387,13 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
               order: q.order,
             }
             if (['multiple_choice', 'checkboxes', 'dropdown'].includes(newType)) {
-              newQuestion.options = q.options && q.options.length > 0 
-                ? q.options 
-                : [
-                    { id: `${questionId}-opt-1`, label: 'Option 1', value_key: 'option_1', order: 1 },
-                    { id: `${questionId}-opt-2`, label: 'Option 2', value_key: 'option_2', order: 2 },
-                  ]
-              // Preserve selection limit for checkboxes
+              newQuestion.options =
+                q.options && q.options.length > 0
+                  ? q.options
+                  : [
+                      { id: `${questionId}-opt-1`, label: 'Option 1', value_key: 'option_1', order: 1 },
+                      { id: `${questionId}-opt-2`, label: 'Option 2', value_key: 'option_2', order: 2 },
+                    ]
               if (newType === 'checkboxes' && (q as any).selectionLimit) {
                 newQuestion.selectionLimit = (q as any).selectionLimit
               }
@@ -291,11 +405,13 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
               newQuestion.maxLabel = q.maxLabel || 'Strongly Agree'
             }
             return newQuestion
-          })
+          }),
         }
       })
     )
   }
+
+  // ── Option CRUD ───────────────────────────────────────────────────────
 
   function addOptionToQuestion(questionId: string, label: string = '') {
     setSections(prev =>
@@ -315,7 +431,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
             order: newOptions.length,
           })
           return { ...q, options: newOptions }
-        })
+        }),
       }))
     )
   }
@@ -328,9 +444,11 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
           if (q.id !== questionId) return q
           return {
             ...q,
-            options: (q.options || []).filter(o => o.id !== optionId).map((o, idx) => ({ ...o, order: idx + 1 })),
+            options: (q.options || [])
+              .filter(o => o.id !== optionId)
+              .map((o, idx) => ({ ...o, order: idx + 1 })),
           }
-        })
+        }),
       }))
     )
   }
@@ -343,11 +461,9 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
           if (q.id !== questionId) return q
           return {
             ...q,
-            options: (q.options || []).map(o =>
-              o.id === optionId ? { ...o, ...updates } : o
-            ),
+            options: (q.options || []).map(o => (o.id === optionId ? { ...o, ...updates } : o)),
           }
-        })
+        }),
       }))
     )
   }
@@ -361,11 +477,8 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
           if (q.id !== questionId) return q
           const opts = [...(q.options || [])]
           ;[opts[optionIndex - 1], opts[optionIndex]] = [opts[optionIndex], opts[optionIndex - 1]]
-          return {
-            ...q,
-            options: opts.map((o, idx) => ({ ...o, order: idx + 1 })),
-          }
-        })
+          return { ...q, options: opts.map((o, idx) => ({ ...o, order: idx + 1 })) }
+        }),
       }))
     )
   }
@@ -375,25 +488,22 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
       prev.map(s => {
         const q = (s.questions || []).find(qq => qq.id === questionId)
         if (!q || !q.options || optionIndex === q.options.length - 1) return s
-        
         return {
           ...s,
           questions: (s.questions || []).map(qq => {
             if (qq.id !== questionId) return qq
             const opts = [...(qq.options || [])]
             ;[opts[optionIndex], opts[optionIndex + 1]] = [opts[optionIndex + 1], opts[optionIndex]]
-            return {
-              ...qq,
-              options: opts.map((o, idx) => ({ ...o, order: idx + 1 })),
-            }
-          })
+            return { ...qq, options: opts.map((o, idx) => ({ ...o, order: idx + 1 })) }
+          }),
         }
       })
     )
   }
 
+  // ── Save ──────────────────────────────────────────────────────────────
+
   async function handleSave() {
-    // Validation
     const totalQuestions = sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0)
     if (!title.trim() || totalQuestions === 0) {
       setError('Survey title and at least one question are required.')
@@ -404,9 +514,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
       .flatMap(s => s.questions || [])
       .flatMap(q => validateQuestion(q))
     if (validationErrors.length > 0) {
-      setError(
-        `Validation errors:\n${validationErrors.map(e => `- ${e.message}`).join('\n')}`
-      )
+      setError(`Validation errors:\n${validationErrors.map(e => `- ${e.message}`).join('\n')}`)
       return
     }
 
@@ -414,17 +522,13 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     setError(null)
 
     try {
-      // Build updated snapshot with sections
       const categories: SurveyCategory[] = sections.map((section, idx) => ({
         ...section,
         order: idx + 1,
         questions: (section.questions || []).map((q, qIdx) => ({
           ...q,
           order: qIdx + 1,
-          options: q.options?.map((opt, optIdx) => ({
-            ...opt,
-            order: optIdx + 1,
-          })),
+          options: q.options?.map((opt, optIdx) => ({ ...opt, order: optIdx + 1 })),
         })),
       }))
 
@@ -440,9 +544,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
         .update({ pack_version_snapshot: newSnapshot })
         .eq('id', surveyId)
 
-      if (updateErr) {
-        throw new Error(updateErr.message || 'Failed to save survey')
-      }
+      if (updateErr) throw new Error(updateErr.message || 'Failed to save survey')
 
       setSuccess(true)
       setTimeout(() => {
@@ -455,6 +557,8 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
       setSaving(false)
     }
   }
+
+  // ─────────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -474,17 +578,24 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                 <h2 className="text-lg font-bold text-gray-900">Edit Survey Questions</h2>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Changes apply to new responses immediately
+                  {crossDragState && (
+                    <span className="ml-2 text-violet-500 font-medium animate-pulse">
+                      ✦ Dragging question — drop into any section
+                    </span>
+                  )}
                 </p>
               </div>
-              <button
-                onClick={handleClose}
-                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-              >
+              <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">
                 ×
               </button>
             </div>
 
-            <div className="px-6 py-6 space-y-5 flex-1 overflow-y-auto">
+            <div
+              ref={scrollContainerRef}
+              className="px-6 py-6 space-y-5 flex-1 overflow-y-auto"
+              onDragOver={handleScrollContainerDragOver}
+              onDragLeave={handleScrollContainerDragLeave}
+            >
               {!success ? (
                 <>
                   {/* Title */}
@@ -518,10 +629,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                     />
                   </div>
 
-                  {/* Live Preview */}
-                
-
-                  {/* Sections Management */}
+                  {/* Sections */}
                   {sections.length > 0 && (
                     <div className="space-y-3">
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -530,20 +638,21 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                       {sections.map((section, index) => (
                         <SectionEditor
                           key={section.id}
-                          section={{
-                            ...section,
-                            order: index + 1,
-                          }}
+                          section={{ ...section, order: index + 1 }}
                           allSections={sections}
                           isExpanded={expandedSectionId === section.id}
-                          onExpand={() => setExpandedSectionId(section.id === expandedSectionId ? null : section.id)}
+                          onExpand={() =>
+                            setExpandedSectionId(section.id === expandedSectionId ? null : section.id)
+                          }
                           onUpdate={(updates) => updateSection(section.id, updates)}
                           onRemove={() => removeSection(section.id)}
                           onMoveUp={() => moveSectionUp(index)}
                           onMoveDown={() => moveSectionDown(index)}
                           canMoveUp={index > 0}
                           canMoveDown={index < sections.length - 1}
-                          onAddQuestion={(sectionId, type) => addNewQuestion(sectionId, type as QuestionType)}
+                          onAddQuestion={(sectionId, type) =>
+                            addNewQuestion(sectionId, type as QuestionType)
+                          }
                           onRemoveQuestion={(sectionId, qId) => removeQuestion(qId)}
                           onUpdateQuestion={(sectionId, qId, updates) => updateQuestion(qId, updates)}
                           onAddOption={addOptionToQuestion}
@@ -552,8 +661,15 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                           onMoveOptionUp={moveOptionUp}
                           onMoveOptionDown={moveOptionDown}
                           expandedQuestionId={expandedQuestionId}
-                          onExpandQuestion={(id: string | null) => setExpandedQuestionId(id === expandedQuestionId ? null : id)}
+                          onExpandQuestion={(id: string | null) =>
+                            setExpandedQuestionId(id === expandedQuestionId ? null : id)
+                          }
                           onChangeQuestionType={changeQuestionType}
+                          // ── Cross-section drag ──
+                          crossDragState={crossDragState}
+                          onCrossDragStart={handleCrossDragStart}
+                          onCrossDragEnd={handleCrossDragEnd}
+                          onCrossDrop={handleCrossDrop}
                         />
                       ))}
                     </div>
@@ -565,8 +681,6 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                   >
                     + Add Section
                   </button>
-
-                  
 
                   {error && (
                     <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 whitespace-pre-wrap">
@@ -584,7 +698,11 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                     </button>
                     <button
                       onClick={handleSave}
-                      disabled={!title.trim() || sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0) === 0 || saving}
+                      disabled={
+                        !title.trim() ||
+                        sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0) === 0 ||
+                        saving
+                      }
                       className="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium py-2.5 rounded-xl disabled:opacity-40 transition-all flex items-center justify-center gap-2"
                     >
                       {saving ? (
@@ -593,7 +711,10 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                           Saving…
                         </>
                       ) : (
-                        <>💾 Save Changes ({sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0)})</>
+                        <>
+                          💾 Save Changes (
+                          {sections.reduce((sum, s) => sum + (s.questions?.length || 0), 0)})
+                        </>
                       )}
                     </button>
                   </div>
@@ -604,9 +725,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                     <span className="text-3xl">✓</span>
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-1">Survey Updated!</h3>
-                  <p className="text-sm text-gray-500">
-                    Your changes have been saved successfully.
-                  </p>
+                  <p className="text-sm text-gray-500">Your changes have been saved successfully.</p>
                 </div>
               )}
             </div>
@@ -617,7 +736,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
   )
 }
 
-// ── Question Edit Block Component ──────────────────────────────────────────
+// ── QuestionEditBlock (unchanged, kept for completeness) ──────────────────
 
 interface QuestionEditBlockProps {
   question: Question
@@ -673,9 +792,7 @@ function QuestionEditBlock({
     number: 'Number',
   }
 
-  const isSelectionQuestion = ['multiple_choice', 'checkboxes', 'dropdown'].includes(
-    question.type
-  )
+  const isSelectionQuestion = ['multiple_choice', 'checkboxes', 'dropdown'].includes(question.type)
   const isScaleQuestion = question.type === 'linear_scale'
 
   return (
@@ -686,7 +803,6 @@ function QuestionEditBlock({
           : 'border-gray-200 bg-gray-50/30 hover:border-gray-300'
       }`}
     >
-      {/* Header / Collapse Toggle */}
       <button
         onClick={onExpand}
         className="w-full px-4 py-3 flex items-start gap-3 hover:bg-violet-50/50 transition-colors"
@@ -709,20 +825,14 @@ function QuestionEditBlock({
             )}
           </div>
         </div>
-        <span
-          className={`text-gray-400 transition-transform shrink-0 ${
-            isExpanded ? 'rotate-180' : ''
-          }`}
-        >
+        <span className={`text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}>
           ▼
         </span>
       </button>
 
-      {/* Expanded Content */}
       {isExpanded && (
         <>
           <div className="border-t border-violet-200 px-4 py-4 space-y-4">
-            {/* Question Prompt with Rich Text */}
             <div>
               <label
                 htmlFor={`edit-q-prompt-${question.id}`}
@@ -740,7 +850,6 @@ function QuestionEditBlock({
               />
             </div>
 
-            {/* Required Checkbox */}
             <div className="flex items-center gap-2">
               <input
                 id={`edit-q-required-${question.id}`}
@@ -750,15 +859,11 @@ function QuestionEditBlock({
                 onChange={e => onUpdate({ required: e.target.checked })}
                 className="w-4 h-4 accent-violet-600 rounded"
               />
-              <label
-                htmlFor={`edit-q-required-${question.id}`}
-                className="text-sm text-gray-700 cursor-pointer"
-              >
+              <label htmlFor={`edit-q-required-${question.id}`} className="text-sm text-gray-700 cursor-pointer">
                 This question is required
               </label>
             </div>
 
-            {/* Skip Logic */}
             <SkipLogicEditor
               question={question}
               allQuestions={allQuestions}
@@ -767,7 +872,6 @@ function QuestionEditBlock({
               onUpdate={(skipLogic) => onUpdate({ skipLogic: skipLogic ? [skipLogic] : undefined })}
             />
 
-            {/* Options for Selection Questions */}
             {isSelectionQuestion && (
               <div className="space-y-2 pt-2 border-t border-violet-100">
                 <p className="text-xs font-semibold text-gray-700">Options</p>
@@ -785,161 +889,63 @@ function QuestionEditBlock({
                     />
                     <div className="flex gap-1">
                       {optIdx > 0 && (
-                        <button
-                          onClick={() => onMoveOptionUp(optIdx)}
-                          className="p-1 text-gray-400 hover:text-gray-600 text-xs"
-                          title="Move up"
-                        >
-                          ▲
-                        </button>
+                        <button onClick={() => onMoveOptionUp(optIdx)} className="p-1 text-gray-400 hover:text-gray-600 text-xs" title="Move up">▲</button>
                       )}
                       {optIdx < (question.options || []).length - 1 && (
-                        <button
-                          onClick={() => onMoveOptionDown(optIdx)}
-                          className="p-1 text-gray-400 hover:text-gray-600 text-xs"
-                          title="Move down"
-                        >
-                          ▼
-                        </button>
+                        <button onClick={() => onMoveOptionDown(optIdx)} className="p-1 text-gray-400 hover:text-gray-600 text-xs" title="Move down">▼</button>
                       )}
                       {(question.options || []).length > 2 && (
-                        <button
-                          onClick={() => onRemoveOption(option.id)}
-                          className="p-1 text-red-500 hover:text-red-700 text-xs"
-                        >
-                          ✕
-                        </button>
+                        <button onClick={() => onRemoveOption(option.id)} className="p-1 text-red-500 hover:text-red-700 text-xs">✕</button>
                       )}
                     </div>
                   </div>
                 ))}
-                <button
-                  onClick={() => onAddOption()}
-                  className="text-xs text-violet-600 hover:text-violet-700 font-medium mt-2"
-                >
+                <button onClick={() => onAddOption()} className="text-xs text-violet-600 hover:text-violet-700 font-medium mt-2">
                   + Add Option
                 </button>
               </div>
             )}
 
-            {/* Scale Configuration */}
             {isScaleQuestion && (
               <div className="space-y-3 pt-2 border-t border-violet-100">
                 <p className="text-xs font-semibold text-gray-700">Scale Configuration</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label
-                      htmlFor={`edit-scale-min-${question.id}`}
-                      className="block text-xs text-gray-600 mb-1"
-                    >
-                      Min Value
-                    </label>
-                    <input
-                      id={`edit-scale-min-${question.id}`}
-                      name={`editScaleMin_${question.id}`}
-                      type="number"
-                      min="1"
-                      value={question.scaleMin || 1}
-                      onChange={e =>
-                        onUpdate({ scaleMin: parseInt(e.target.value) || 1 })
-                      }
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    />
+                    <label htmlFor={`edit-scale-min-${question.id}`} className="block text-xs text-gray-600 mb-1">Min Value</label>
+                    <input id={`edit-scale-min-${question.id}`} name={`editScaleMin_${question.id}`} type="number" min="1" value={question.scaleMin || 1} onChange={e => onUpdate({ scaleMin: parseInt(e.target.value) || 1 })} className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
                   </div>
                   <div>
-                    <label
-                      htmlFor={`edit-scale-max-${question.id}`}
-                      className="block text-xs text-gray-600 mb-1"
-                    >
-                      Max Value
-                    </label>
-                    <input
-                      id={`edit-scale-max-${question.id}`}
-                      name={`editScaleMax_${question.id}`}
-                      type="number"
-                      min="2"
-                      max="10"
-                      value={question.scaleMax || 5}
-                      onChange={e =>
-                        onUpdate({ scaleMax: parseInt(e.target.value) || 5 })
-                      }
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    />
+                    <label htmlFor={`edit-scale-max-${question.id}`} className="block text-xs text-gray-600 mb-1">Max Value</label>
+                    <input id={`edit-scale-max-${question.id}`} name={`editScaleMax_${question.id}`} type="number" min="2" max="10" value={question.scaleMax || 5} onChange={e => onUpdate({ scaleMax: parseInt(e.target.value) || 5 })} className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label
-                      htmlFor={`edit-scale-min-label-${question.id}`}
-                      className="block text-xs text-gray-600 mb-1"
-                    >
-                      Min Label
-                    </label>
-                    <input
-                      id={`edit-scale-min-label-${question.id}`}
-                      name={`editScaleMinLabel_${question.id}`}
-                      type="text"
-                      value={question.minLabel || ''}
-                      onChange={e => onUpdate({ minLabel: e.target.value })}
-                      placeholder="e.g., Strongly Disagree"
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    />
+                    <label htmlFor={`edit-scale-min-label-${question.id}`} className="block text-xs text-gray-600 mb-1">Min Label</label>
+                    <input id={`edit-scale-min-label-${question.id}`} name={`editScaleMinLabel_${question.id}`} type="text" value={question.minLabel || ''} onChange={e => onUpdate({ minLabel: e.target.value })} placeholder="e.g., Strongly Disagree" className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
                   </div>
                   <div>
-                    <label
-                      htmlFor={`edit-scale-max-label-${question.id}`}
-                      className="block text-xs text-gray-600 mb-1"
-                    >
-                      Max Label
-                    </label>
-                    <input
-                      id={`edit-scale-max-label-${question.id}`}
-                      name={`editScaleMaxLabel_${question.id}`}
-                      type="text"
-                      value={question.maxLabel || ''}
-                      onChange={e => onUpdate({ maxLabel: e.target.value })}
-                      placeholder="e.g., Strongly Agree"
-                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
-                    />
+                    <label htmlFor={`edit-scale-max-label-${question.id}`} className="block text-xs text-gray-600 mb-1">Max Label</label>
+                    <input id={`edit-scale-max-label-${question.id}`} name={`editScaleMaxLabel_${question.id}`} type="text" value={question.maxLabel || ''} onChange={e => onUpdate({ maxLabel: e.target.value })} placeholder="e.g., Strongly Agree" className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-violet-400" />
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Action Buttons */}
           <div className="border-t border-violet-200 px-4 py-3 flex items-center justify-between gap-2">
             <div className="flex gap-1.5">
               {index > 0 && (
-                <button
-                  onClick={onMoveUp}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors"
-                  title="Move up"
-                >
-                  ▲
-                </button>
+                <button onClick={onMoveUp} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors" title="Move up">▲</button>
               )}
               {index < totalQuestions - 1 && (
-                <button
-                  onClick={onMoveDown}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors"
-                  title="Move down"
-                >
-                  ▼
-                </button>
+                <button onClick={onMoveDown} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white rounded transition-colors" title="Move down">▼</button>
               )}
-              <button
-                onClick={onDuplicate}
-                className="px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-white rounded transition-colors font-medium"
-                title="Duplicate this question"
-              >
+              <button onClick={onDuplicate} className="px-2.5 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-white rounded transition-colors font-medium" title="Duplicate">
                 📋 Duplicate
               </button>
             </div>
-            <button
-              onClick={onRemove}
-              className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors font-medium"
-            >
+            <button onClick={onRemove} className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors font-medium">
               🗑️ Delete
             </button>
           </div>
