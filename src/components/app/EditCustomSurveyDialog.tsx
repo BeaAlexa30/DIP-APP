@@ -95,11 +95,13 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState<RichTextContent | undefined>()
   const [sections, setSections] = useState<SurveyCategory[]>([])
-  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null)
-  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
+  const [expandedQuestionIds, setExpandedQuestionIds] = useState<Set<string>>(new Set())
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [invalidQuestionIds, setInvalidQuestionIds] = useState<Set<string>>(new Set())
+  const [invalidSectionIds, setInvalidSectionIds] = useState<Set<string>>(new Set())
 
   function handleOpen() {
     setTitle(snapshot?.packName ?? '')
@@ -112,12 +114,14 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
       setDescription(desc as RichTextContent)
     }
     setSections(snapshot?.categories ?? [])
-    setExpandedQuestionId(null)
-    setExpandedSectionId(null)
+    setExpandedQuestionIds(new Set())
+    setExpandedSectionIds(new Set())
     setSaving(false)
     setError(null)
     setSuccess(false)
+    setInvalidQuestionIds(new Set())
     setIsOpen(true)
+    setInvalidSectionIds(new Set())
   }
 
   function handleClose() {
@@ -194,18 +198,21 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
       questions: [],
     }
     setSections(prev => [...prev, newSection])
-    setExpandedSectionId(newSection.id)
+    setExpandedSectionIds(prev => new Set(prev).add(newSection.id))
   }
 
   function removeSection(id: string) {
     setSections(prev => prev.filter(s => s.id !== id))
-    if (expandedSectionId === id) setExpandedSectionId(null)
+    setExpandedSectionIds(prev => { const next = new Set(prev); next.delete(id); return next })
   }
 
   function updateSection(id: string, updates: Partial<SurveyCategory>) {
     setSections(prev =>
       prev.map(s => (s.id === id ? { ...s, ...updates } : s))
     )
+    if (updates.name?.trim()) {
+      setInvalidSectionIds(prev => { const next = new Set(prev); next.delete(id); return next })
+    }
   }
 
   function moveSectionUp(index: number) {
@@ -242,8 +249,8 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
       const newQuestion = createQuestion(type)
       newSection.questions = [newQuestion]
       setSections(prev => [...prev, newSection])
-      setExpandedQuestionId(newQuestion.id)
-      setExpandedSectionId(newSection.id)
+      setExpandedQuestionIds(prev => new Set(prev).add(newQuestion.id))
+      setExpandedSectionIds(prev => new Set(prev).add(newSection.id))
       return
     }
     
@@ -255,8 +262,8 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
           : s
       )
     )
-    setExpandedQuestionId(newQuestion.id)
-    setExpandedSectionId(sectionId)
+    setExpandedQuestionIds(prev => new Set(prev).add(newQuestion.id))
+    setExpandedSectionIds(prev => new Set(prev).add(sectionId))
   }
 
   function removeQuestion(id: string) {
@@ -266,7 +273,7 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
         questions: (s.questions || []).filter(q => q.id !== id)
       }))
     )
-    if (expandedQuestionId === id) setExpandedQuestionId(null)
+    setExpandedQuestionIds(prev => { const next = new Set(prev); next.delete(id); return next })
   }
 
   function updateQuestion(id: string, updates: Partial<Question>) {
@@ -276,6 +283,12 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
         questions: (s.questions || []).map(q => (q.id === id ? { ...q, ...updates } : q))
       }))
     )
+    // Clear validation error for this question in real-time
+    setInvalidQuestionIds(prev => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
   }
 
   function changeQuestionType(sectionId: string, questionId: string, newType: string) {
@@ -421,13 +434,30 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
       return
     }
 
-    const validationErrors = sections
-      .flatMap(s => s.questions || [])
-      .flatMap(q => validateQuestion(q))
-    if (validationErrors.length > 0) {
-      setError(
-        `Validation errors:\n${validationErrors.map(e => `- ${e.message}`).join('\n')}`
+    const invalidIds = new Set(
+      sections.flatMap(s =>
+        (s.questions || []).filter(q => validateQuestion(q).length > 0).map(q => q.id)
       )
+    )
+    const emptySectionIds = new Set(
+      sections.filter(s => !s.name?.trim()).map(s => s.id)
+    )
+    const sectionsWithQuestionErrors = sections.filter(s =>
+      (s.questions || []).some(q => invalidIds.has(q.id))
+    )
+    const allSectionsToExpand = new Set([
+      ...emptySectionIds,
+      ...sectionsWithQuestionErrors.map(s => s.id)
+    ])
+
+    if (emptySectionIds.size > 0 || invalidIds.size > 0) {
+      if (emptySectionIds.size > 0) setInvalidSectionIds(emptySectionIds)
+      if (invalidIds.size > 0) {
+        setInvalidQuestionIds(invalidIds)
+        setExpandedQuestionIds(new Set(invalidIds))
+      }
+      setExpandedSectionIds(allSectionsToExpand)
+      setError('Please fill up the required fields.')
       return
     }
 
@@ -575,9 +605,15 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                             ...section,
                             order: index + 1,
                           }}
+                          invalidQuestionIds={invalidQuestionIds}
+                          invalidSectionIds={invalidSectionIds}
                           allSections={sections}
-                          isExpanded={expandedSectionId === section.id}
-                          onExpand={() => setExpandedSectionId(section.id === expandedSectionId ? null : section.id)}
+                          isExpanded={expandedSectionIds.has(section.id)}
+                          onExpand={() => setExpandedSectionIds(prev => {
+                            const next = new Set(prev)
+                            if (next.has(section.id)) { next.delete(section.id) } else { next.add(section.id) }
+                            return next
+                          })}
                           onUpdate={(updates) => updateSection(section.id, updates)}
                           onRemove={() => removeSection(section.id)}
                           onMoveUp={() => moveSectionUp(index)}
@@ -592,8 +628,16 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                           onUpdateOption={updateOption}
                           onMoveOptionUp={moveOptionUp}
                           onMoveOptionDown={moveOptionDown}
-                          expandedQuestionId={expandedQuestionId}
-                          onExpandQuestion={(id: string | null) => setExpandedQuestionId(id === expandedQuestionId ? null : id)}
+                          expandedQuestionId={expandedQuestionIds}
+                            onExpandQuestion={(id: string | null) =>
+                              setExpandedQuestionIds(prev => {
+                                const next = new Set(prev)
+                                if (id === null) return next
+                                if (next.has(id)) next.delete(id)
+                                else next.add(id)
+                                return next
+                              })
+                            }
                           onChangeQuestionType={changeQuestionType}
                         />
                         </div>

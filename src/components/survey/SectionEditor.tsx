@@ -29,9 +29,11 @@ interface SectionEditorProps {
   onUpdateOption?: (questionId: string, optionId: string, updates: any) => void
   onMoveOptionUp?: (questionId: string, optionIndex: number) => void
   onMoveOptionDown?: (questionId: string, optionIndex: number) => void
-  expandedQuestionId?: string | null
+  expandedQuestionId?: Set<string> | string | null
   onExpandQuestion?: (questionId: string | null) => void
   onChangeQuestionType?: (sectionId: string, questionId: string, newType: string) => void
+  invalidQuestionIds?: Set<string>
+  invalidSectionIds?: Set<string>
 }
 
 export default function SectionEditor({
@@ -56,7 +58,9 @@ export default function SectionEditor({
   expandedQuestionId,
   onExpandQuestion,
   onChangeQuestionType,
-}: SectionEditorProps) {
+  invalidQuestionIds,
+  invalidSectionIds,
+  }: SectionEditorProps) {
   const [showAddButton, setShowAddButton] = useState(false)
   const [buttonLabel, setButtonLabel] = useState('')
   const [buttonTarget, setButtonTarget] = useState('')
@@ -86,8 +90,7 @@ export default function SectionEditor({
     onUpdate({ sectionButtons: newButtons })
   }
 
-  const descriptionText =
-    typeof section.description === 'string' ? section.description : section.description?.text || ''
+
 
   return (
     <div
@@ -120,7 +123,6 @@ export default function SectionEditor({
             <p className="text-sm font-medium text-gray-900">{section.name || '(Untitled Section)'}</p>
             <p className="text-xs text-gray-500 mt-0.5">
               {section.questions.length} question{section.questions.length !== 1 ? 's' : ''}
-              {section.description && ' • Has description'}
             </p>
           </div>
           <span className={`text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}>
@@ -145,7 +147,11 @@ export default function SectionEditor({
                 value={section.name}
                 onChange={e => onUpdate({ name: e.target.value })}
                 placeholder="e.g., Demographics, Product Experience"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className={`w-full px-3 py-2 border rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 transition-colors ${
+                  invalidSectionIds?.has(section.id)
+                    ? 'border-red-400 focus:ring-red-300'
+                    : 'border-gray-200 focus:ring-blue-400'
+                }`}
               />
             </div>
 
@@ -174,7 +180,9 @@ export default function SectionEditor({
                 </p>
                 <div className="space-y-2 bg-white rounded-lg border border-blue-100 p-3">
                   {section.questions.map((q: any, idx: number) => {
-                    const isQuestionExpanded = expandedQuestionId === q.id
+                    const isQuestionExpanded = expandedQuestionId instanceof Set
+                      ? expandedQuestionId.has(q.id)
+                      : expandedQuestionId === q.id
                     return (
                       <div
                         key={q.id}
@@ -205,25 +213,23 @@ export default function SectionEditor({
                       >
                         {/* Drag handle + collapse toggle row */}
                         <div className="flex items-center gap-2">
-                          <div
-                            className="w-5 h-5 bg-gray-300 rounded shrink-0 cursor-grab active:cursor-grabbing ml-2 mt-1 flex items-center justify-center"
-                            title="Drag to reorder"
-                            onMouseDown={e => {
-                              // make parent draggable only when handle is grabbed
-                              const parent = e.currentTarget.closest('[draggable]') as HTMLElement
-                              if (parent) parent.draggable = true
-                            }}
-                          >
-                            ⠿
-                          </div>
+                          {!isQuestionExpanded && (
+                            <div
+                              className="w-5 h-5 bg-gray-300 rounded shrink-0 cursor-grab active:cursor-grabbing ml-2 mt-1 flex items-center justify-center"
+                              title="Drag to reorder"
+                              onMouseDown={e => {
+                                const parent = e.currentTarget.closest('[draggable]') as HTMLElement
+                                if (parent) parent.draggable = true
+                              }}
+                            >
+                              ⠿
+                            </div>
+                          )}
+
                           <button
                           onDragStart={e => e.preventDefault()}
                             onClick={() => {
-                              if (isQuestionExpanded) {
-                                onExpandQuestion?.(null)
-                              } else {
-                                onExpandQuestion?.(q.id)
-                              }
+                              onExpandQuestion?.(q.id)
                             }}
                             className={`flex-1 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
                               isQuestionExpanded
@@ -263,7 +269,11 @@ export default function SectionEditor({
                                   })
                                 }}
                                 placeholder="Enter the question text..."
-                                className="w-full px-2 py-2 border border-violet-200 rounded text-xs text-gray-700 bg-white hover:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"
+                                className={`w-full px-2 py-2 border rounded text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 resize-none transition-colors ${
+                                  invalidQuestionIds?.has(q.id)
+                                    ? 'border-red-400 focus:ring-red-300'
+                                    : 'border-violet-200 hover:border-violet-300 focus:ring-violet-400'
+                                }`}
                                 rows={2}
                               />
                             </div>
