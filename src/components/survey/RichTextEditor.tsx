@@ -41,7 +41,9 @@ export default function RichTextEditor({
   name,
 }: RichTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editableRef = useRef<HTMLDivElement>(null)
   const savedSelection = useRef<Range | null>(null)
+  const isApplyingMark = useRef(false)
   const [text, setText] = useState(
     !value
       ? ''
@@ -52,6 +54,13 @@ export default function RichTextEditor({
   const [marks, setMarks] = useState<TextMark[]>(
     !value || typeof value === 'string' ? [] : value.marks || []
   )
+
+  // Sync text content to the contentEditable element
+  useEffect(() => {
+    if (editableRef.current && editableRef.current.innerHTML !== text && document.activeElement !== editableRef.current) {
+      editableRef.current.innerHTML = text
+    }
+  }, [text])
 
   const [, forceUpdate] = useState(0)
   const [activeMarks, setActiveMarks] = useState<Set<string>>(new Set())
@@ -72,13 +81,16 @@ export default function RichTextEditor({
     }
   }, [value])
 
-  function handleTextChange(newText: string) {
-    setText(newText)
-    onChange({ text: newText, marks })
+  function handleTextChange(newHtml: string) {
+    setText(newHtml)
+    // Preserve marks when text changes - only update the text
+    onChange({ text: newHtml, marks })
   }
 
   function applyMark(type: Exclude<TextMark['type'], 'link'>) {
     const command = type === 'bold' ? 'bold' : type === 'italic' ? 'italic' : 'underline'
+    isApplyingMark.current = true
+    
     if (savedSelection.current) {
       const sel = window.getSelection()
       if (sel) {
@@ -87,12 +99,23 @@ export default function RichTextEditor({
       }
     }
     document.execCommand(command, false)
-    // Re-save selection after execCommand so it stays highlighted
-    const sel = window.getSelection()
-    if (sel && sel.rangeCount > 0) {
-      savedSelection.current = sel.getRangeAt(0).cloneRange()
+    
+    // Force focus back to element and capture the current formatting state
+    if (editableRef.current) {
+      editableRef.current.focus()
+      // Get the updated HTML after execCommand
+      const updatedHtml = editableRef.current.innerHTML
+      // Update local state
+      setText(updatedHtml)
+      // Immediately notify parent with the formatted content
+      onChange({ text: updatedHtml, marks })
     }
-    updateActiveMarks()
+    
+    // Update toolbar button states
+    setTimeout(() => {
+      updateActiveMarks()
+      isApplyingMark.current = false
+    }, 0)
   }
 
   function clearFormatting() {
@@ -120,107 +143,28 @@ export default function RichTextEditor({
     return activeMarks.has(type)
   }
 
-  // Helper: render text with formatting applied for preview
-  function renderPreview(): React.ReactNode {
-    if (!text) return <em className="text-gray-400">(empty)</em>
-    
-    // Sort marks by start position
-    const sortedMarks = [...marks].sort((a, b) => a.start - b.start)
-    const segments: Array<{ text: string; marks: TextMark[] }> = []
-    let lastEnd = 0
+    const [isFocused, setIsFocused] = useState(false)
 
-    sortedMarks.forEach(mark => {
-      if (mark.start > lastEnd) {
-        segments.push({ text: text.substring(lastEnd, mark.start), marks: [] })
-      }
-      const markText = text.substring(mark.start, mark.end)
-      const existingSegment = segments.find(s => s.text === markText && s.marks.some(m => m.type === mark.type))
-      if (!existingSegment) {
-        segments.push({ text: markText, marks: [mark] })
-      }
-      lastEnd = mark.end
-    })
-
-    if (lastEnd < text.length) {
-      segments.push({ text: text.substring(lastEnd), marks: [] })
-    }
-
-    return (
-      <span>
-        {segments.map((seg, idx) => {
-          let element: React.ReactNode = seg.text
-          
-          seg.marks.forEach(mark => {
-            if (mark.type === 'bold') {
-              element = <strong key={`${idx}-bold`}>{element}</strong>
-            } else if (mark.type === 'italic') {
-              element = <em key={`${idx}-italic`}>{element}</em>
-            } else if (mark.type === 'underline') {
-              element = <u key={`${idx}-underline`}>{element}</u>
-            } else if (mark.type === 'strikethrough') {
-              element = <s key={`${idx}-strikethrough`}>{element}</s>
-            } else if (mark.type === 'link' && mark.url) {
-              element = <a key={`${idx}-link`} href={mark.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-700">{element}</a>
-            }
-          })
-          
-          return <span key={idx}>{element}</span>
-        })}
-      </span>
-    )
-  }
-
-  return (
+   return (
     <div className="space-y-2">
-      {/* Toolbar */}
-      <div className="flex flex-wrap gap-1 p-2 bg-gray-50 rounded-lg border border-gray-200">
-        <button
-          onMouseDown={e => { e.preventDefault(); applyMark('bold') }}
-          className={`px-3 py-1.5 text-sm font-bold rounded transition-colors ${
-            isMarkActive('bold')
-              ? 'bg-violet-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
-          }`}
-          title="Bold (Ctrl+B)"
-        >
-          B
-        </button>
-
-        <button
-          onMouseDown={e => { e.preventDefault(); applyMark('italic') }}
-          className={`px-3 py-1.5 text-sm italic rounded transition-colors ${
-            isMarkActive('italic')
-              ? 'bg-violet-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
-          }`}
-          title="Italic (Ctrl+I)"
-        >
-          I
-        </button>
-
-        <button
-          onMouseDown={e => { e.preventDefault(); applyMark('underline') }}
-          className={`px-3 py-1.5 text-sm underline rounded transition-colors ${
-            isMarkActive('underline')
-              ? 'bg-violet-600 text-white'
-              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
-          }`}
-          title="Underline (Ctrl+U)"
-        >
-          U
-        </button>
-      </div>
-
       {/* Textarea */}
       <div className="relative">
         <div
+          ref={editableRef}
+          id={id}
           className={`w-full px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 min-h-[${rows * 2}rem] bg-white ${className}`}
           contentEditable
           suppressContentEditableWarning
           data-placeholder={placeholder}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           onInput={e => {
             const el = e.currentTarget
-            handleTextChange(el.innerText)
+            // Only update if we're not in the middle of applying a mark
+            if (!isApplyingMark.current) {
+              handleTextChange(el.innerHTML)
+            }
+            isApplyingMark.current = false
           }}
           onSelect={() => {
             const sel = window.getSelection()
@@ -240,11 +184,6 @@ export default function RichTextEditor({
           style={{
             minHeight: `${rows * 1.8}rem`,
           }}
-          ref={el => {
-            if (el && el.innerText !== text && document.activeElement !== el) {
-              el.innerText = text
-            }
-          }}
           onKeyDown={e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); applyMark('bold') }
             if ((e.ctrlKey || e.metaKey) && e.key === 'i') { e.preventDefault(); applyMark('italic') }
@@ -253,43 +192,42 @@ export default function RichTextEditor({
         />
       </div>
 
-      {/* Formatting Preview */}
-      {marks.length > 0 && (
-        <div className="space-y-3">
-          {/* Visual Preview */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-xs font-semibold text-blue-900 mb-2">Preview:</p>
-            <div className="text-sm text-gray-700 leading-relaxed">
-              {renderPreview()}
-            </div>
-          </div>
-
-          {/* Formatting Details */}
-          <div className="text-xs text-gray-500 space-y-1">
-            <p className="font-semibold">Applied formatting:</p>
-            {marks.map((mark, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200"
-              >
-                <span>
-                  <strong className="text-gray-700">
-                    {mark.type === 'link' ? '🔗' : mark.type === 'bold' ? 'B' : mark.type === 'italic' ? 'I' : 'U'}
-                  </strong>
-                  {': '}
-                  {text.substring(mark.start, Math.min(mark.end, mark.start + 30))}
-                  {mark.end - mark.start > 30 ? '...' : ''}
-                  {mark.type === 'link' && ` → ${mark.url}`}
-                </span>
-                <button
-                  onClick={() => removeMarkAtRange(mark.type, mark.start, mark.end)}
-                  className="text-red-600 hover:text-red-700 text-xs font-medium"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
+      {/* Toolbar - shown below input only when focused */}
+      {isFocused && (
+        <div className="flex flex-wrap gap-1 pl-2">
+          <button
+            onMouseDown={e => { e.preventDefault(); applyMark('bold') }}
+            className={`px-3 py-1.5 text-sm font-bold rounded transition-colors ${
+              isMarkActive('bold')
+                ? 'bg-violet-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+            }`}
+            title="Bold (Ctrl+B)"
+          >
+            B
+          </button>
+          <button
+            onMouseDown={e => { e.preventDefault(); applyMark('italic') }}
+            className={`px-3 py-1.5 text-sm italic rounded transition-colors ${
+              isMarkActive('italic')
+                ? 'bg-violet-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+            }`}
+            title="Italic (Ctrl+I)"
+          >
+            I
+          </button>
+          <button
+            onMouseDown={e => { e.preventDefault(); applyMark('underline') }}
+            className={`px-3 py-1.5 text-sm underline rounded transition-colors ${
+              isMarkActive('underline')
+                ? 'bg-violet-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+            }`}
+            title="Underline (Ctrl+U)"
+          >
+            U
+          </button>
         </div>
       )}
     </div>
