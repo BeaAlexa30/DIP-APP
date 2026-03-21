@@ -183,6 +183,10 @@ export default function RichTextEditor({
           }}
           style={{
             minHeight: `${rows * 1.8}rem`,
+            wordBreak: 'break-word',
+            overflowWrap: 'break-word',
+            whiteSpace: 'normal',
+            hyphens: 'auto',
           }}
           onKeyDown={e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'b') { e.preventDefault(); applyMark('bold') }

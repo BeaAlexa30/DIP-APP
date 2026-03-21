@@ -341,7 +341,7 @@ export default function SurveyFlow({
                                       onClick={e => e.stopPropagation()}
                                       placeholder="Please specify..."
                                       className={`flex-1 min-w-[100px] text-xs sm:text-sm focus:outline-none bg-transparent ${
-                                        isSelected ? 'text-white placeholder:text-white/60 break-words' : 'text-gray-700 placeholder:text-gray-400 break-all'
+                                        isSelected ? 'text-white placeholder:text-white/60 break-words' : 'text-gray-700 placeholder:text-gray-400 break-words'
                                       }`}
                                     />
                                   </Button>
@@ -349,7 +349,8 @@ export default function SurveyFlow({
                                   <Button
                                     onClick={() => handleAnswer(question.id, opt.value_key)}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="  justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace  text-left break-all w-full whitespace-normal "
+                                    className="justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto text-left w-full whitespace-normal"
+                                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                                   >
                                     {opt.label}
                                   </Button>
@@ -422,7 +423,8 @@ export default function SurveyFlow({
                                     }}
                                     disabled={!isSelected && !!maxReached}
                                     variant={isSelected ? 'default' : 'outline'}
-                                    className="justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto whitespace  text-left break-all w-full whitespace-normal"
+                                    className="justify-start px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-xs sm:text-sm transition-all border sm:border-2 h-auto text-left w-full whitespace-normal"
+                                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                                   >
                                     {opt.label}
                                   </Button>
