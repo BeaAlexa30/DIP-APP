@@ -167,29 +167,15 @@ function OptionActionDropdown({ optId, action, allSections, currentSectionId, on
  * An animated drop-position indicator rendered between sections.
  * Appears with a smooth scale-in so it never feels jarring.
  */
-function DropPositionLine({ label }: { label: string }) {
+function DropPositionLine() {
   return (
     <div
-      className="relative flex items-center gap-2 px-1 pointer-events-none"
+      className="relative px-1 pointer-events-none"
       style={{
         animation: 'dropLineReveal 120ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
       }}
     >
-      {/* Pill label */}
-      <span
-        className="shrink-0 px-2 py-0.5 text-[10px] font-semibold text-white rounded-full shadow-sm"
-        style={{ background: 'linear-gradient(90deg, #7c3aed, #6366f1)' }}
-      >
-        {label}
-      </span>
-      {/* Line */}
-      <div
-        className="flex-1 h-0.5 rounded-full"
-        style={{ background: 'linear-gradient(90deg, #7c3aed, #818cf8, transparent)' }}
-      />
-      {/* Dot cap */}
-      <div className="shrink-0 w-2 h-2 rounded-full bg-violet-500 shadow-sm shadow-violet-300" />
-
+      <div className="w-full h-0.5 rounded-full bg-violet-500" />
       <style>{`
         @keyframes dropLineReveal {
           from { opacity: 0; transform: scaleX(0.6); }
@@ -240,6 +226,8 @@ interface SectionEditorProps {
   sectionDropIndicator?: SectionDropIndicator | null
   /** True while ANY section card is being dragged (not a question drag). */
   isSectionDragging?: boolean
+  onSectionHandleDragStart?: (e: React.DragEvent) => void
+  onSectionHandleDragEnd?: () => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
@@ -274,6 +262,8 @@ export default function SectionEditor({
   onCrossDrop,
   sectionDropIndicator,
   isSectionDragging = false,
+  onSectionHandleDragStart,
+  onSectionHandleDragEnd,
 }: SectionEditorProps) {
   const [showAddButton, setShowAddButton] = useState(false)
   const [buttonLabel, setButtonLabel] = useState('')
@@ -340,11 +330,31 @@ export default function SectionEditor({
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('question-drag', JSON.stringify({ questionId: q.id, sourceSectionId: section.id }))
     onCrossDragStart({ sourceSectionId: section.id, questionId: q.id, sourceIndex: idx })
+
+    const row = (e.currentTarget as HTMLElement).closest('.question-drag-row') as HTMLElement
+    if (!row) return
+
+    const clone = row.cloneNode(true) as HTMLElement
+    clone.style.position = 'fixed'
+    clone.style.top = '-9999px'
+    clone.style.left = '-9999px'
+    clone.style.width = `${row.offsetWidth}px`
+    clone.style.opacity = '1'
+    clone.style.pointerEvents = 'none'
+    clone.style.borderRadius = '8px'
+    clone.style.boxShadow = '0 8px 30px rgba(0,0,0,0.18)'
+    clone.style.background = 'white'
+    clone.style.margin = '0'
+    document.body.appendChild(clone)
+
+    const rowRect = row.getBoundingClientRect()
+    const offsetX = e.clientX - rowRect.left
+    const offsetY = e.clientY - rowRect.top
+    e.dataTransfer.setDragImage(clone, offsetX, offsetY)
+    setTimeout(() => document.body.removeChild(clone), 0)
   }
 
   function handleQuestionDragEnd(e: React.DragEvent, elKey: string) {
-    const el = draggableEls.current.get(elKey)
-    if (el) el.draggable = false
     setDropOverIndex(null)
     onCrossDragEnd()
   }
@@ -363,7 +373,10 @@ export default function SectionEditor({
     if (!isDragging) return
     e.preventDefault()
     e.stopPropagation()
-    setDropOverIndex(idx)
+    // Use cursor Y to decide: top half = insert before, bottom half = insert after
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const isBottomHalf = e.clientY > rect.top + rect.height / 2
+    setDropOverIndex(isBottomHalf ? idx + 1 : idx)
   }
 
   function handleSectionBodyDragOver(e: React.DragEvent) {
@@ -385,8 +398,11 @@ export default function SectionEditor({
     e.preventDefault()
     e.stopPropagation()
     if (!isDragging) return
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const isBottomHalf = e.clientY > rect.top + rect.height / 2
+    const insertAt = isBottomHalf ? idx + 1 : idx
     setDropOverIndex(null)
-    onCrossDrop(section.id, idx)
+    onCrossDrop(section.id, insertAt)
   }
 
   function handleSectionDragLeave(e: React.DragEvent) {
@@ -399,16 +415,20 @@ export default function SectionEditor({
 
   const showInsertLine = (targetIdx: number, sourceQuestionId: string) => {
     if (!isDragging || dropOverIndex !== targetIdx) return false
+    if (!dragFromHere) return true // cross-section: always show
     const sourceIdx = section.questions.findIndex(q => q.id === sourceQuestionId)
-    if (dragFromHere && (targetIdx === sourceIdx || targetIdx === sourceIdx + 1)) return false
+    // Only suppress if dropping back on self (adjacent slots that result in no movement)
+    if (targetIdx === sourceIdx) return false
+    if (targetIdx === sourceIdx + 1) return false
     return true
   }
 
   // ── derived drag states ───────────────────────────────────────────────
 
+  const sectionWrapperRef = useRef<HTMLDivElement>(null)
   const questionAreaIsDragTarget  = isDragging && !dragFromHere
   const questionAreaIsActiveDrop  = isDragging && dropOverIndex !== null && !dragFromHere
-  const sectionWrapperRef = useRef<HTMLDivElement>(null)
+  
 
   // ─── Render ───────────────────────────────────────────────────────────
 
@@ -417,46 +437,33 @@ export default function SectionEditor({
       {/* ── ABOVE drop indicator ──────────────────────────────────────── */}
       {showAboveLine && (
         <div className="mb-1">
-          <DropPositionLine label="Insert above" />
+          <DropPositionLine />
         </div>
       )}
 
       <div
         ref={sectionWrapperRef}
         draggable={false}
-        onDragStart={e => {
-          if ((e.target as HTMLElement).closest('[data-section-handle]')) {
-            e.dataTransfer.effectAllowed = 'move'
-          }
-        }}
-        className={`border rounded-xl transition-all duration-150 ${
-          sectionIsDragTarget
-            ? 'border-violet-300 bg-violet-50/50 shadow-md ring-2 ring-violet-200 ring-offset-1 scale-[1.005]'
-            : questionAreaIsActiveDrop
-            ? 'border-violet-400 bg-violet-50/60 shadow-md ring-2 ring-violet-300'
-            : questionAreaIsDragTarget
-            ? 'border-blue-300 bg-blue-50/30 border-dashed border-3'
-            : isExpanded
-            ? 'border-blue-300 bg-blue-50/40 shadow-sm'
-            : 'border-gray-200 bg-gray-50/30 hover:border-gray-300'
-        }`}
+        className={`border rounded-xl transition-all duration-150 ...`}
         onDragOver={handleSectionDragOver}
         onDrop={handleSectionDrop}
         onDragLeave={handleSectionDragLeave}
       >
+
         {/* Header / Collapse Toggle */}
         <div className="flex items-center">
           <div
             data-section-handle
-            className="w-5 h-5 bg-gray-300 rounded shrink-0 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-500 ml-3"
+            className="w-5 h-5 bg-gray-300 rounded shrink-0 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-500 ml-3 select-none"
             title="Drag to reorder section"
-            onMouseDown={() => {
-              const wrapper = sectionWrapperRef.current?.parentElement as HTMLElement
-              if (wrapper) wrapper.draggable = true
+            draggable
+            onDragStart={e => {
+              e.stopPropagation()
+              onSectionHandleDragStart?.(e)
             }}
-            onMouseUp={() => {
-              const wrapper = sectionWrapperRef.current?.parentElement as HTMLElement
-              if (wrapper) wrapper.draggable = false
+            onDragEnd={e => {
+              e.stopPropagation()
+              onSectionHandleDragEnd?.()
             }}
           >
             ⠿
@@ -472,11 +479,6 @@ export default function SectionEditor({
               <p className="text-sm font-medium text-gray-900 break-words">{section.name || '(Untitled Section)'}</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {section.questions.length} question{section.questions.length !== 1 ? 's' : ''}
-                {sectionIsDragTarget && (
-                  <span className="ml-2 text-violet-500 font-medium animate-pulse">
-                    {sectionDropIndicator?.position === 'above' ? '↑ Drop above' : '↓ Drop below'}
-                  </span>
-                )}
                 {questionAreaIsDragTarget && !sectionIsDragTarget && (
                   <span className="ml-2 text-violet-500 font-medium animate-pulse">↓ Drop here</span>
                 )}
@@ -538,7 +540,7 @@ export default function SectionEditor({
                   </p>
 
                   <div
-                    className={`space-y-2 rounded-lg border p-3 transition-colors ${
+                    className={`space-y-2 rounded-lg border px-2 py-3 transition-colors ${
                       questionAreaIsActiveDrop ? 'border-violet-300 bg-violet-50/40' : 'bg-white border-blue-100'
                     }`}
                     onDragOver={handleSectionBodyDragOver}
@@ -552,21 +554,34 @@ export default function SectionEditor({
                       const showLineAbove  = showInsertLine(idx, crossDragState?.questionId ?? '')
 
                       return (
-                        <div key={q.id}>
+                        <div
+                          key={q.id}
+                          style={{
+                            display: 'grid',
+                            gridTemplateRows: isBeingDragged ? '0fr' : '1fr',
+                            transition: 'grid-template-rows 200ms ease',
+                          }}
+                          onDragOver={e => handleQuestionRowDragOver(e, idx)}
+                          onDrop={e => handleQuestionRowDrop(e, idx)}
+                        >
+                        <div style={{ overflow: 'hidden' }}>
                           {/* Insert-before indicator */}
-                          {showLineAbove && (
-                            <div className="h-1 my-1 rounded-full bg-violet-400 transition-all shadow-sm" />
+                          {showLineAbove && !isBeingDragged && (
+                            <div
+                              className="pointer-events-none"
+                              style={{ animation: 'dropLineReveal 120ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
+                            >
+                              <div className="w-full h-0.5 rounded-full bg-violet-500 my-1" />
+                            </div>
                           )}
 
                           <div
                             onDragOver={e => handleQuestionRowDragOver(e, idx)}
                             onDrop={e => handleQuestionRowDrop(e, idx)}
-                            className={`rounded border transition-all ${
-                              isBeingDragged
-                                ? 'opacity-40 border-dashed border-violet-300 bg-violet-50'
-                                : 'border-transparent'
-                            }`}
+                            className="question-drag-row rounded border border-transparent transition-all"
+                            style={{ opacity: isBeingDragged ? 0 : 1, transition: 'opacity 150ms ease' }}
                           >
+                            
                             {/* Drag handle + collapse toggle row */}
                             <div className="flex items-center gap-2 w-full">
                               {!isQuestionExpanded && (
@@ -574,8 +589,34 @@ export default function SectionEditor({
                                   className="w-5 h-5 bg-gray-300 hover:bg-violet-300 rounded shrink-0 cursor-grab active:cursor-grabbing ml-2 mt-1 flex items-center justify-center text-gray-500 hover:text-violet-700 transition-colors select-none"
                                   title="Drag to reorder (across sections)"
                                   draggable
-                                  onDragStart={e => handleQuestionDragStart(e, q, idx)}
-                                  onDragEnd={e => handleQuestionDragEnd(e, q.id)}
+                                  onDragStart={e => {
+                                    e.stopPropagation()
+                                    const row = e.currentTarget.closest('.question-drag-row') as HTMLElement
+                                    if (!row) return
+                                    const clone = row.cloneNode(true) as HTMLElement
+                                    clone.style.position = 'fixed'
+                                    clone.style.top = '-9999px'
+                                    clone.style.left = '-9999px'
+                                    clone.style.width = `${row.offsetWidth}px`
+                                    clone.style.opacity = '1'
+                                    clone.style.pointerEvents = 'none'
+                                    clone.style.borderRadius = '8px'
+                                    clone.style.boxShadow = '0 8px 30px rgba(0,0,0,0.18)'
+                                    clone.style.background = 'white'
+                                    clone.style.margin = '0'
+                                    document.body.appendChild(clone)
+                                    const rowRect = row.getBoundingClientRect()
+                                    e.dataTransfer.setDragImage(clone, e.clientX - rowRect.left, e.clientY - rowRect.top)
+                                    setTimeout(() => document.body.removeChild(clone), 0)
+                                    // Now trigger the actual question drag logic
+                                    e.dataTransfer.effectAllowed = 'move'
+                                    e.dataTransfer.setData('question-drag', JSON.stringify({ questionId: q.id, sourceSectionId: section.id }))
+                                    onCrossDragStart({ sourceSectionId: section.id, questionId: q.id, sourceIndex: idx })
+                                  }}
+                                  onDragEnd={e => {
+                                    e.stopPropagation()
+                                    handleQuestionDragEnd(e, q.id)
+                                  }}
                                 >
                                   ⠿
                                 </div>
@@ -584,13 +625,13 @@ export default function SectionEditor({
                               <button
                                 onDragStart={e => e.preventDefault()}
                                 onClick={() => onExpandQuestion?.(q.id)}
-                                className={`w-10/12 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
+                                className={`flex-1 min-w-0 flex items-start justify-between gap-2 p-2 rounded border transition-all ${
                                   isQuestionExpanded
                                     ? 'bg-violet-100 border-violet-300'
                                     : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50'
                                 }`}
                               >
-                                <div className=" text-left w-11/12">
+                                <div className="flex-1 min-w-0 text-left">
                                   <p className="text-xs font-medium text-gray-900 break-words w-full ">
                                     {typeof q.prompt === 'string' ? q.prompt : q.prompt?.text || '(untitled)'}
                                   </p>
@@ -700,16 +741,30 @@ export default function SectionEditor({
                                         return (
                                           <div
                                             key={opt.id}
-                                            draggable={!isOther}
-                                            onDragStart={() => setOptDragIndex({ qId: q.id, idx: optIdx })}
-                                            onDragOver={e => { e.preventDefault(); e.stopPropagation(); setOptDragOverIndex(optIdx) }}
+                                            style={{
+                                              display: 'grid',
+                                              gridTemplateRows: optDragIndex?.qId === q.id && optDragIndex?.idx === optIdx ? '0fr' : '1fr',
+                                              transition: 'grid-template-rows 200ms ease',
+                                            }}
+                                            onDragOver={e => {
+                                              if (isOther) return
+                                              e.preventDefault()
+                                              e.stopPropagation()
+                                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                                              const isBottomHalf = e.clientY > rect.top + rect.height / 2
+                                              setOptDragOverIndex(isBottomHalf ? optIdx + 1 : optIdx)
+                                            }}
                                             onDrop={e => {
                                               e.stopPropagation()
                                               if (!optDragIndex || optDragIndex.qId !== q.id || optDragIndex.idx === optIdx) return
                                               if (isOther) return
+                                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                                              const isBottomHalf = e.clientY > rect.top + rect.height / 2
+                                              const insertAt = isBottomHalf ? optIdx + 1 : optIdx
                                               const reordered = [...q.options]
                                               const [moved] = reordered.splice(optDragIndex.idx, 1)
-                                              reordered.splice(optIdx, 0, moved)
+                                              const adjustedInsert = insertAt > optDragIndex.idx ? insertAt - 1 : insertAt
+                                              reordered.splice(adjustedInsert, 0, moved)
                                               const withoutOther = reordered.filter((o: any) => o.value_key !== '__other__')
                                               const otherOpt = reordered.find((o: any) => o.value_key === '__other__')
                                               const final = otherOpt ? [...withoutOther, otherOpt] : withoutOther
@@ -717,16 +772,65 @@ export default function SectionEditor({
                                               setOptDragIndex(null)
                                               setOptDragOverIndex(null)
                                             }}
-                                            className={`flex items-center gap-2 p-2 rounded border transition-all ${
-                                              optDragOverIndex === optIdx && optDragIndex?.idx !== optIdx && optDragIndex?.qId === q.id
-                                                ? 'border-violet-400 bg-violet-50'
-                                                : isOther
-                                                ? 'bg-blue-50 border-blue-200'
-                                                : 'bg-white border-violet-100'
-                                            }`}
                                           >
+                                          <div style={{ overflow: 'hidden' }}>
+                                            {/* Insert-before indicator */}
+                                            {/* Insert-before indicator */}
+                                            {optDragIndex?.qId === q.id && optDragOverIndex === optIdx && (() => {
+                                                const src = optDragIndex!.idx
+                                                if (optIdx === src) return false
+                                                if (optIdx === src + 1) return false
+                                                return true
+                                              })() && (
+                                              <div
+                                                className="pointer-events-none"
+                                                style={{ animation: 'dropLineReveal 120ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
+                                              >
+                                                <div className="w-full h-0.5 rounded-full bg-violet-500 my-1" />
+                                              </div>
+                                            )}
+                                            <div
+                                              className={`option-drag-row flex items-center gap-2 p-2 rounded border transition-all ${
+                                                optDragIndex?.qId === q.id && optDragIndex?.idx === optIdx
+                                                  ? 'opacity-0'
+                                                  : isOther
+                                                  ? 'bg-blue-50 border-blue-200'
+                                                  : 'bg-white border-violet-100'
+                                              }`}
+                                            >
                                             {!isOther && (
-                                              <div className="w-4 h-4 bg-gray-200 rounded shrink-0 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-400 text-[10px]">
+                                              <div
+                                                className="w-4 h-4 bg-gray-200 hover:bg-violet-300 rounded shrink-0 cursor-grab active:cursor-grabbing flex items-center justify-center text-gray-400 hover:text-violet-700 text-[10px] select-none transition-colors"
+                                                draggable
+                                                onDragStart={e => {
+                                                  e.stopPropagation()
+                                                  const row = (e.currentTarget as HTMLElement).closest('.option-drag-row') as HTMLElement
+                                                  if (row) {
+                                                    const clone = row.cloneNode(true) as HTMLElement
+                                                    clone.style.position = 'fixed'
+                                                    clone.style.top = '-9999px'
+                                                    clone.style.left = '-9999px'
+                                                    clone.style.width = `${row.offsetWidth}px`
+                                                    clone.style.opacity = '1'
+                                                    clone.style.pointerEvents = 'none'
+                                                    clone.style.borderRadius = '6px'
+                                                    clone.style.boxShadow = '0 4px 16px rgba(0,0,0,0.14)'
+                                                    clone.style.background = 'white'
+                                                    clone.style.margin = '0'
+                                                    document.body.appendChild(clone)
+                                                    const rowRect = row.getBoundingClientRect()
+                                                    e.dataTransfer.setDragImage(clone, e.clientX - rowRect.left, e.clientY - rowRect.top)
+                                                    setTimeout(() => document.body.removeChild(clone), 0)
+                                                  }
+                                                  e.dataTransfer.effectAllowed = 'move'
+                                                  setOptDragIndex({ qId: q.id, idx: optIdx })
+                                                }}
+                                                onDragEnd={e => {
+                                                  e.stopPropagation()
+                                                  setOptDragIndex(null)
+                                                  setOptDragOverIndex(null)
+                                                }}
+                                              >
                                                 ⠿
                                               </div>
                                             )}
@@ -768,9 +872,43 @@ export default function SectionEditor({
                                             >
                                               ✕
                                             </button>
+                                            </div>
+                                            </div>
                                           </div>
                                         )
                                       })}
+
+                                      {/* Trailing drop zone for options */}
+                                      {optDragIndex?.qId === q.id && (() => {
+                                        const nonOtherOpts = q.options.filter((o: any) => o.value_key !== '__other__')
+                                        const srcIdx = optDragIndex!.idx
+                                        const isAlreadyLast = srcIdx === nonOtherOpts.length - 1
+                                        if (isAlreadyLast) return null
+                                        return (
+                                          <div
+                                            onDragOver={e => { e.preventDefault(); e.stopPropagation(); setOptDragOverIndex(q.options.length) }}
+                                            onDrop={e => {
+                                              e.preventDefault(); e.stopPropagation()
+                                              if (!optDragIndex || optDragIndex.qId !== q.id) return
+                                              const reordered = [...q.options]
+                                              const [moved] = reordered.splice(optDragIndex.idx, 1)
+                                              const withoutOther = reordered.filter((o: any) => o.value_key !== '__other__')
+                                              const otherOpt = reordered.find((o: any) => o.value_key === '__other__')
+                                              withoutOther.push(moved)
+                                              const final = otherOpt ? [...withoutOther, otherOpt] : withoutOther
+                                              onUpdateQuestion?.(section.id, q.id, { options: final.map((o, i) => ({ ...o, order: i + 1 })) })
+                                              setOptDragIndex(null); setOptDragOverIndex(null)
+                                            }}
+                                            className="py-1"
+                                          >
+                                            {optDragOverIndex === q.options.length && optDragIndex?.idx !== q.options.filter((o: any) => o.value_key !== '__other__').length - 1 && (
+                                              <div className="pointer-events-none" style={{ animation: 'dropLineReveal 120ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}>
+                                                <div className="w-full h-0.5 rounded-full bg-violet-500" />
+                                              </div>
+                                            )}
+                                          </div>
+                                        )
+                                      })()}
                                     </div>
 
                                     {/* Add Option / Add Other */}
@@ -871,31 +1009,57 @@ export default function SectionEditor({
                               </div>
                             )}
                           </div>
-                        </div>
+                          </div>
+                          </div>
                       )
                     })}
 
-                    {/* Trailing drop zone */}
-                    {isDragging && (() => {
-                      const srcIdx = dragFromHere
-                        ? section.questions.findIndex(q => q.id === crossDragState?.questionId)
-                        : -1
-                      const isAlreadyLast = dragFromHere && srcIdx === section.questions.length - 1
-                      if (isAlreadyLast) return null
-                      return (
-                        <div
-                          onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDropOverIndex(section.questions.length) }}
-                          onDrop={e => { e.preventDefault(); e.stopPropagation(); onCrossDrop(section.id, section.questions.length); setDropOverIndex(null) }}
-                          className={`mt-1 rounded border-2 border-dashed text-center py-2 text-xs font-medium transition-all select-none ${
-                            dropOverIndex === section.questions.length
-                              ? 'border-violet-400 bg-violet-50 text-violet-600'
-                              : 'border-gray-200 text-gray-400'
-                          }`}
-                        >
-                          {dropOverIndex === section.questions.length ? '⬇ Drop here' : '+ Drop at end'}
-                        </div>
-                      )
-                    })()}
+                    {/* Trailing drop zone — line for internal, zone for cross-section */}
+                      {isDragging && (() => {
+                        const srcIdx = dragFromHere
+                          ? section.questions.findIndex(q => q.id === crossDragState?.questionId)
+                          : -1
+                        const isAlreadyLast = dragFromHere && srcIdx === section.questions.length - 1
+                        if (isAlreadyLast) return null
+
+                        if (dragFromHere) {
+                          // Internal: just show the line indicator
+                          return (
+                            <div
+                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDropOverIndex(section.questions.length) }}
+                              onDrop={e => { e.preventDefault(); e.stopPropagation(); onCrossDrop(section.id, section.questions.length); setDropOverIndex(null) }}
+                              className="py-1"
+                            >
+                              {dropOverIndex === section.questions.length && (
+                                <div
+                                  className="pointer-events-none"
+                                  style={{ animation: 'dropLineReveal 120ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
+                                >
+                                  <div className="w-full h-0.5 rounded-full bg-violet-500" />
+                                </div>
+                              )}
+                            </div>
+                          )
+                        }
+
+                        // Cross-section: just show the line indicator at the end
+                        return (
+                          <div
+                            onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDropOverIndex(section.questions.length) }}
+                            onDrop={e => { e.preventDefault(); e.stopPropagation(); onCrossDrop(section.id, section.questions.length); setDropOverIndex(null) }}
+                            className="py-1"
+                          >
+                            {dropOverIndex === section.questions.length && (
+                              <div
+                                className="pointer-events-none"
+                                style={{ animation: 'dropLineReveal 120ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
+                              >
+                                <div className="w-full h-0.5 rounded-full bg-violet-500" />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                   </div>
                 </div>
               )}
@@ -905,13 +1069,16 @@ export default function SectionEditor({
                 <div
                   onDragOver={e => { e.preventDefault(); setDropOverIndex(0) }}
                   onDrop={e => { e.preventDefault(); onCrossDrop(section.id, 0); setDropOverIndex(null) }}
-                  className={`rounded-lg border-2 border-dashed py-6 text-center text-xs font-medium transition-all ${
-                    dropOverIndex === 0
-                      ? 'border-violet-400 bg-violet-50 text-violet-600'
-                      : 'border-gray-200 text-gray-400'
-                  }`}
+                  className="py-2 min-h-[32px]"
                 >
-                  ↓ Drop question here
+                  {dropOverIndex === 0 && (
+                    <div
+                      className="pointer-events-none"
+                      style={{ animation: 'dropLineReveal 120ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
+                    >
+                      <div className="w-full h-0.5 rounded-full bg-violet-500" />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -963,7 +1130,7 @@ export default function SectionEditor({
       {/* ── BELOW drop indicator ──────────────────────────────────────── */}
       {showBelowLine && (
         <div className="mt-1">
-          <DropPositionLine label="Insert below" />
+          <DropPositionLine />
         </div>
       )}
     </div>

@@ -50,6 +50,8 @@ import SectionEditor, {
 } from '@/components/survey/SectionEditor'
 import SkipLogicEditor from '@/components/survey/SkipLogicEditor'
 
+
+
 interface Props {
   surveyId: string
   snapshot: SurveySnapshot
@@ -287,11 +289,27 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
   // ── Section-card drag handlers ────────────────────────────────────────
 
   function handleSectionDragStart(e: React.DragEvent, index: number) {
-    // Only fire when the section handle triggered this (set by SectionEditor's onMouseDown)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('section-drag-index', String(index))
     setDraggingSectionIndex(index)
     isDraggingRef.current = true
+
+    const cardEl = sectionCardRefs.current.get(sections[index].id)
+    if (cardEl) {
+      const clone = cardEl.cloneNode(true) as HTMLElement
+      clone.style.position = 'fixed'
+      clone.style.top = '-9999px'
+      clone.style.left = '-9999px'
+      clone.style.width = `${cardEl.offsetWidth}px`
+      clone.style.opacity = '1'
+      clone.style.pointerEvents = 'none'
+      clone.style.borderRadius = '12px'
+      clone.style.boxShadow = '0 8px 30px rgba(0,0,0,0.18)'
+      document.body.appendChild(clone)
+      const cardRect = cardEl.getBoundingClientRect()
+      e.dataTransfer.setDragImage(clone, e.clientX - cardRect.left, e.clientY - cardRect.top)
+      setTimeout(() => document.body.removeChild(clone), 0)
+    }
   }
 
   function handleSectionDragEnd() {
@@ -330,9 +348,20 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
     const rect = cardEl.getBoundingClientRect()
     const position: 'above' | 'below' = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
 
+    // Suppress indicator if the drop would not actually change position.
+    // e.g. dragging index 1 "below" index 0 → would land at index 1 = no change
+    // dragging index 1 "above" index 2 → would land at index 1 = no change
+    const fromIndex = draggingSectionIndex!
+    const wouldLandAt = position === 'above' ? targetIndex : targetIndex + 1
+    const effectiveInsert = wouldLandAt > fromIndex ? wouldLandAt - 1 : wouldLandAt
+    if (effectiveInsert === fromIndex) {
+      setSectionDropIndicator(null)
+      return
+    }
+
     setSectionDropIndicator(prev =>
       prev?.targetSectionId === targetSectionId && prev?.position === position
-        ? prev   // identical — skip re-render
+        ? prev
         : { targetSectionId, position },
     )
   }
@@ -768,60 +797,73 @@ export default function EditCustomSurveyDialog({ surveyId, snapshot }: Props) {
                       {sections.map((section, index) => (
                         <div
                           key={section.id}
-                          ref={el => {
-                            if (el) sectionCardRefs.current.set(section.id, el)
-                            else sectionCardRefs.current.delete(section.id)
+                          style={{
+                            display: 'grid',
+                            gridTemplateRows: draggingSectionIndex === index ? '0fr' : '1fr',
+                            transition: 'grid-template-rows 200ms ease',
                           }}
-                          draggable={false}
                           onDragStart={e => handleSectionDragStart(e, index)}
-                          onDragEnd={handleSectionDragEnd}
+                          onDragEnd={e => {
+                            ;(e.currentTarget as HTMLElement).draggable = false
+                            handleSectionDragEnd()
+                          }}
                           onDragOver={e => handleSectionCardDragOver(e, section.id, index)}
                           onDragLeave={e => handleSectionCardDragLeave(e, section.id)}
                           onDrop={e => handleSectionCardDrop(e, index)}
                         >
-                          <SectionEditor
-                            section={{ ...section, order: index + 1 }}
-                            invalidQuestionIds={invalidQuestionIds}
-                            invalidSectionIds={invalidSectionIds}
-                            allSections={sections}
-                            isExpanded={expandedSectionIds.has(section.id)}
-                            onExpand={() => setExpandedSectionIds(prev => {
-                              const next = new Set(prev)
-                              if (next.has(section.id)) { next.delete(section.id) } else { next.add(section.id) }
-                              return next
-                            })}
-                            onUpdate={(updates) => updateSection(section.id, updates)}
-                            onRemove={() => removeSection(section.id)}
-                            onMoveUp={() => moveSectionUp(index)}
-                            onMoveDown={() => moveSectionDown(index)}
-                            canMoveUp={index > 0}
-                            canMoveDown={index < sections.length - 1}
-                            onAddQuestion={(sectionId, type) => addNewQuestion(sectionId, type as QuestionType)}
-                            onRemoveQuestion={(sectionId, qId) => removeQuestion(qId)}
-                            onUpdateQuestion={(sectionId, qId, updates) => updateQuestion(qId, updates)}
-                            onAddOption={addOptionToQuestion}
-                            onRemoveOption={removeOptionFromQuestion}
-                            onUpdateOption={updateOption}
-                            onMoveOptionUp={moveOptionUp}
-                            onMoveOptionDown={moveOptionDown}
-                            expandedQuestionId={expandedQuestionIds}
-                            onExpandQuestion={(id: string | null) =>
-                              setExpandedQuestionIds(prev => {
+                          <div
+                            ref={el => {
+                              if (el) sectionCardRefs.current.set(section.id, el)
+                              else sectionCardRefs.current.delete(section.id)
+                            }}
+                            style={{ overflow: 'hidden', opacity: draggingSectionIndex === index ? 0 : 1, transition: 'opacity 150ms ease' }}
+                          >
+                            <SectionEditor
+                              section={{ ...section, order: index + 1 }}
+                              invalidQuestionIds={invalidQuestionIds}
+                              invalidSectionIds={invalidSectionIds}
+                              allSections={sections}
+                              isExpanded={expandedSectionIds.has(section.id)}
+                              onExpand={() => setExpandedSectionIds(prev => {
                                 const next = new Set(prev)
-                                if (id === null) return next
-                                if (next.has(id)) next.delete(id)
-                                else next.add(id)
+                                if (next.has(section.id)) { next.delete(section.id) } else { next.add(section.id) }
                                 return next
-                              })
-                            }
-                            onChangeQuestionType={changeQuestionType}
-                            crossDragState={crossDragState}
-                            onCrossDragStart={handleCrossDragStart}
-                            onCrossDragEnd={handleCrossDragEnd}
-                            onCrossDrop={handleCrossDrop}
-                            isSectionDragging={isDraggingSection}
-                            sectionDropIndicator={sectionDropIndicator}
-                          />
+                              })}
+                              onUpdate={(updates) => updateSection(section.id, updates)}
+                              onRemove={() => removeSection(section.id)}
+                              onMoveUp={() => moveSectionUp(index)}
+                              onMoveDown={() => moveSectionDown(index)}
+                              canMoveUp={index > 0}
+                              canMoveDown={index < sections.length - 1}
+                              onAddQuestion={(sectionId, type) => addNewQuestion(sectionId, type as QuestionType)}
+                              onRemoveQuestion={(sectionId, qId) => removeQuestion(qId)}
+                              onUpdateQuestion={(sectionId, qId, updates) => updateQuestion(qId, updates)}
+                              onAddOption={addOptionToQuestion}
+                              onRemoveOption={removeOptionFromQuestion}
+                              onUpdateOption={updateOption}
+                              onMoveOptionUp={moveOptionUp}
+                              onMoveOptionDown={moveOptionDown}
+                              expandedQuestionId={expandedQuestionIds}
+                              onExpandQuestion={(id: string | null) =>
+                                setExpandedQuestionIds(prev => {
+                                  const next = new Set(prev)
+                                  if (id === null) return next
+                                  if (next.has(id)) next.delete(id)
+                                  else next.add(id)
+                                  return next
+                                })
+                              }
+                              onChangeQuestionType={changeQuestionType}
+                              crossDragState={crossDragState}
+                              onCrossDragStart={handleCrossDragStart}
+                              onCrossDragEnd={handleCrossDragEnd}
+                              onCrossDrop={handleCrossDrop}
+                              isSectionDragging={isDraggingSection}
+                              sectionDropIndicator={sectionDropIndicator}
+                              onSectionHandleDragStart={e => handleSectionDragStart(e, index)}
+                              onSectionHandleDragEnd={handleSectionDragEnd}
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
