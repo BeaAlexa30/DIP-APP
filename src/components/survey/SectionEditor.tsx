@@ -94,6 +94,7 @@ function OptionActionDropdown({ optId, action, allSections, currentSectionId, on
   return (
     <div className="relative">
       <button
+        data-opt-id={optId}
         onClick={() => setOpen(v => !v)}
         title="Set action for this option"
         className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium border rounded-full transition-colors hover:opacity-80 ${badgeColors[currentType]}`}
@@ -108,7 +109,22 @@ function OptionActionDropdown({ optId, action, allSections, currentSectionId, on
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-1 z-20 w-48 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          <div className="fixed z-[9999] w-48 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+            style={{
+              top: (() => {
+                const btn = document.querySelector(`[data-opt-id="${optId}"]`) as HTMLElement
+                const rect = btn?.getBoundingClientRect()
+                if (!rect) return '0'
+                return rect.bottom + window.scrollY + 4 + 'px'
+              })(),
+              left: (() => {
+                const btn = document.querySelector(`[data-opt-id="${optId}"]`) as HTMLElement
+                const rect = btn?.getBoundingClientRect()
+                if (!rect) return '0'
+                return rect.left + 'px'
+              })(),
+            }}
+          >
             <button
               onClick={() => handleSelectType('next')}
               className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-50 transition-colors ${
@@ -773,8 +789,7 @@ export default function SectionEditor({
                                               setOptDragOverIndex(null)
                                             }}
                                           >
-                                          <div style={{ overflow: 'hidden' }}>
-                                            {/* Insert-before indicator */}
+                                          <div style={{ overflow: optDragIndex?.qId === q.id && optDragIndex?.idx === optIdx ? 'hidden' : 'visible' }}>
                                             {/* Insert-before indicator */}
                                             {optDragIndex?.qId === q.id && optDragOverIndex === optIdx && (() => {
                                                 const src = optDragIndex!.idx
