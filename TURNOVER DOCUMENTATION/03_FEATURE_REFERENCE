@@ -1,0 +1,28 @@
+# Feature Reference Catalog
+
+## 1. Project & Framework Management
+- **Purpose**: To define the "Lens" through which data is analyzed.
+- **Logic**: Projects store client-specific goals; Frameworks define the structure of questions and scoring rules (risk/friction flags).
+- **Files**: `src/app/app/projects/`, `src/lib/framework/`
+
+## 2. Dynamic Survey Engine
+- **Purpose**: High-fidelity data collection with respondent tracking.
+- **Logic**: Generates unique tokens to prevent duplicate responses and allow for expiration. Snapshots the framework pack version at the time of publication to ensure historical integrity.
+- **Files**: `src/app/survey/`, `src/lib/supabase/`
+
+## 3. Intelligence Scoring Engine (AI & Deterministic)
+- **Purpose**: Translates qualitative feedback into numerical indices.
+- **Logic**: 
+  - **Deterministic**: Uses `AssessmentScoringEngine.ts` to apply predefined delta weights.
+  - **AI-Powered**: Uses `AIAssessmentScoringEngine.ts` to perform multi-dimensional reasoning via LLM.
+- **Key Metrics**: Trust Index, Usability, Conversion Risk, Loyalty, and Executive Health.
+
+## 4. Prioritized Issue Ranking
+- **Purpose**: Directs stakeholders to the most critical problems.
+- **Logic**: Calculates a `priority_score` based on Frequency, Friction level, and Risk magnitude identified in the feedback.
+- **Files**: `src/lib/scoring/AIAssessmentScoringEngine.ts` (Step 10)
+
+## 5. Decision Dashboards
+- **Purpose**: Visualization of complex data for executive review.
+- **Logic**: Aggregates `score_results` and `issue_rankings` for a specific `score_run_id`.
+- **Files**: `src/app/reports/`

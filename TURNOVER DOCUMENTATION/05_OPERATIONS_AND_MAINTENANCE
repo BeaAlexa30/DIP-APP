@@ -1,0 +1,18 @@
+# Operations and Maintenance Guide
+
+## 1. Deployment Requirements
+- **Frontend**: Deploy to Vercel using the `main` branch.
+- **Database**: Run `supabase db push` from the CLI to sync migrations to production.
+- **Environment Variables**:
+  - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY` (Required for scoring engines)
+  - `GROQ_API_KEY` (Required for AI features)
+
+## 2. Updating Decision Parameters
+To modify how the platform "thinks":
+- **Update Scoring Rules**: Edit the `framework_scoring_rules` table via the UI or SQL to change weights for deterministic scoring.
+- **Refine AI Reasoning**: Modify the `systemPrompt` in `src/lib/scoring/AIAssessmentScoringEngine.ts` to adjust the AI's persona or scoring criteria.
+
+## 3. Monitoring & Maintenance
+- **Activity Logs**: View `activity_logs` table for an audit trail of score runs and project changes.
+- **AI Fallback**: The system automatically falls back to deterministic scoring if the Groq API exceeds rate limits or fails. Monitor console logs for "[AI Scoring] Groq unavailable" warnings.

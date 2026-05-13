@@ -1,44 +1,40 @@
 'use client'
 
-import { Button } from '@/components/ui/button'
-import type { Database } from '@/types/DatabaseSchemaDefinitions'
 import { useState } from 'react'
 import EditProjectModal from './ProjectEditDialog'
-import ArchiveProjectButton from './ProjectRemovalControl'
+import DeleteProjectButton from './ProjectRemovalControl'
 import { useCan } from './UserProfileProvider'
+import type { Database } from '@/types/DatabaseSchemaDefinitions'
 
 type Project = Database['public']['Tables']['projects']['Row']
 
 interface Props {
   project: Project
-  surveyCount?: number
 }
 
-export default function ProjectActions({ project, surveyCount }: Props) {
+export default function ProjectActions({ project }: Props) {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const canEdit = useCan('editProject')
-  const canArchive = useCan('deleteProject')  // deleteProject = Admin only
+  const canDelete = useCan('deleteProject')
 
-  if (!canEdit && !canArchive) return null
+  if (!canEdit && !canDelete) return null
 
   return (
     <>
       <div className="flex gap-3">
         {canEdit && (
-          <Button
+          <button
             onClick={() => setIsEditOpen(true)}
-            variant="outline"
-            className="rounded-lg text-gray-600 border-gray-300 hover:bg-gray-50 hover:text-gray-800"
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             Edit Project
-          </Button>
+          </button>
         )}
-        {canArchive && (
-          <ArchiveProjectButton
-            projectId={project.id}
+        {canDelete && (
+          <DeleteProjectButton 
+            projectId={project.id} 
             projectName={project.client_name}
             currentStatus={project.status}
-            surveyCount={surveyCount}
           />
         )}
       </div>

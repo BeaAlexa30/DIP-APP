@@ -1,0 +1,25 @@
+# Technical Architecture
+
+## 1. Technology Stack
+- **Frontend**: Next.js 14+ (App Router), React, Tailwind CSS, Shadcn UI.
+- **Backend-as-a-Service**: Supabase (PostgreSQL, Auth, Real-time).
+- **Intelligence Layer**: Groq SDK (Llama 3.3 70B Versatile) for context-aware reasoning.
+- **Infrastructure**: Vercel (Frontend/API), Supabase Cloud (Database/Auth).
+
+## 2. Data Flow: From Raw Data to Decision Output
+1. **Perception (Ingestion)**: 
+   - Surveys are published with unique `survey_tokens`.
+   - Responses are stored in the `responses` and `response_answers` tables.
+2. **Reasoning (Processing)**:
+   - The `AIAssessmentScoringEngine` aggregates responses and fetches project context (goals, industry).
+   - This context, along with raw answers (including free-text), is sent to the Groq LLM.
+   - The LLM derives 4-7 custom scoring categories specific to the project's goal.
+3. **Action (Output)**:
+   - Scoring results are persisted in `score_results` and `index_results`.
+   - "Issue Rankings" are generated with priority scores and specific recommended actions.
+   - The Executive Dashboard renders these via the `reports` route.
+
+## 3. Supabase Integration Logic
+- **Server-Side Connection**: Uses `createServiceClient` in `src/lib/supabase/ServerSideDbConnector.ts` for privileged scoring operations.
+- **Migrations**: Database schema is versioned under `supabase/migrations/`, ensuring environment parity.
+- **Triggers**: Automatic `profiles` creation on auth signup and `updated_at` timestamp management.

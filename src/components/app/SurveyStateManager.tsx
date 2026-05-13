@@ -1,17 +1,15 @@
 'use client'
 
-import { Button } from '@/components/ui/button'
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useCan } from './UserProfileProvider'
 
 interface Props {
   surveyId: string
   currentStatus: 'draft' | 'published' | 'closed'
-  projectArchived?: boolean
 }
 
-export default function SurveyStatusControl({ surveyId, currentStatus, projectArchived = false }: Props) {
+export default function SurveyStatusControl({ surveyId, currentStatus }: Props) {
   const router = useRouter()
   const canManage = useCan('manageSurvey')
   const [loading, setLoading] = useState(false)
@@ -54,27 +52,19 @@ export default function SurveyStatusControl({ surveyId, currentStatus, projectAr
 
   return (
     <div className="space-y-2">
-      <Button
+      <button
         onClick={handleToggle}
-        disabled={loading || (isClosed && projectArchived)}
-        title={isClosed && projectArchived ? 'Reopen the project first to re-open this survey' : undefined}
-        className={`w-full rounded-lg ${isClosed && projectArchived
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed hover:bg-gray-100'
-            : isClosed
-              ? 'bg-green-600 hover:bg-green-700'
-              : 'bg-red-500 hover:bg-red-600'
-          }`}
+        disabled={loading}
+        className={`w-full text-sm font-medium px-3 py-2 rounded-lg transition-colors disabled:opacity-50 ${
+          isClosed
+            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+            : 'bg-red-100 text-red-700 hover:bg-red-200'
+        }`}
       >
         {loading ? (isClosed ? 'Reopening...' : 'Closing...') : buttonText}
-      </Button>
+      </button>
 
-      {isClosed && projectArchived && (
-        <p className="text-xs text-gray-400 text-center">
-          🔒 Project is archived — reopen the project to re-enable surveys
-        </p>
-      )}
-
-      {isClosed && !projectArchived && (
+      {isClosed && (
         <span className="text-xs text-gray-500">Survey is closed</span>
       )}
 

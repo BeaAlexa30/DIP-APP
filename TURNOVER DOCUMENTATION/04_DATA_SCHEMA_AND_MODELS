@@ -1,0 +1,17 @@
+# Data Schema and Intelligence Models
+
+## 1. Database Schema Highlights
+- **`projects`**: The root container for all client activities.
+- **`framework_scoring_rules`**: Stores the "knowledge base" for how specific answers impact scores (`score_delta`, `risk_flag`).
+- **`score_runs`**: Tracks every instance of an analysis, providing an immutable record of results for a specific set of responses.
+- **`issue_rankings`**: Stores the actionable output of the AI reasoning process, including `driver_tag` and `recommended_action`.
+
+## 2. Intelligence Models: AI Prompting Logic
+The platform utilizes a **Contextual Scoring Prompt** located in `AIAssessmentScoringEngine.ts`. 
+- **Input**: Project Goals + Framework Snapshot + Aggregated Response Data + Free-text Samples.
+- **Logic**: The model is instructed to *synthesize its own categories* based on the data rather than using rigid templates. This allows for "Emergent Intelligence"—detecting issues the analysts might not have specifically asked about.
+- **Constraints**: Output is strictly enforced as JSON to ensure integration with the PostgreSQL schema.
+
+## 3. Threshold Logic
+- **Risk Flag**: Triggers high priority if an answer suggests data loss, security breaches, or total system failure.
+- **Friction Flag**: Increases the frequency weight if an answer suggests usability barriers or slow performance.
